@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from sim_panel.utils.time import utc_now_iso
+from sim_panel.utils.progress import tqdm_wrap
 from sim_panel.backends import Backend
 from sim_panel.backends.types import Message
 
@@ -38,7 +39,7 @@ def render_product_display_text_prompt(
     system = (
         "You write a human-facing product/intervention description that will be shown to a customer-like evaluator.\n"
         "It must be consistent with the structured attributes.\n"
-        "Do not mention internal IDs. Do not mention that this is synthetic.\n"
+        "Do not mention internal IDs.\n"
         "Output ONLY the description text."
     )
 
@@ -72,6 +73,7 @@ def ensure_display_text(
     settings: ProductDisplayTextGenSettings,
     variant: str = "default",
     overwrite: bool = False,
+    progress: bool = True,
 ) -> List[ProductRecord]:
     """
     For each record of the given display_variant:
@@ -79,7 +81,21 @@ def ensure_display_text(
       - write provenance fields
     """
     out: List[ProductRecord] = []
+
+    # Best-effort progress info: only meaningful when we will actually generate.
+    n_total = 0
+    n_to_generate = 0
     for r in records:
+        if r.display_variant != variant:
+            continue
+        n_total += 1
+        needs_text = overwrite or (r.display_text is None or not r.display_text.strip())
+        if needs_text:
+            n_to_generate += 1
+
+    desc = f"Enrich products ({n_to_generate}/{n_total})"
+
+    for r in tqdm_wrap(records, total=len(records), desc=desc, enabled=progress):
         if r.display_variant != variant:
             out.append(r)
             continue

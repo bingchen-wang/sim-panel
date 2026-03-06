@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from sim_panel.generators.pipeline import EventGenerator
 from sim_panel.generators.types import GeneratorConfig
 from sim_panel.panelists.panelist import Panelist
-from sim_panel.products.models import Product
+from sim_panel.products.product import Product
 
 
 @dataclass(frozen=True)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence
 
+from sim_panel.utils.progress import tqdm_wrap
 from sim_panel.decisions.selection import (
     render_selection_prompt,
     parse_selection_response,
@@ -47,6 +48,7 @@ class EventGenerator:
         *,
         panelists: Sequence[Panelist],
         products: Sequence[Product],
+        progress: bool = True,
     ) -> List[Dict[str, Any]]:
         rng = make_rng(self.cfg.seed)
 
@@ -61,9 +63,9 @@ class EventGenerator:
 
         rows: List[Dict[str, Any]] = []
 
-        for t in range(self.cfg.n_periods):
+        for t in tqdm_wrap(range(self.cfg.n_periods), total=self.cfg.n_periods, desc="Periods", enabled=progress):
             # generator owns time; update runtime agents
-            for p in panelists:
+            for p in tqdm_wrap(panelists, total=len(panelists), desc=f"Set t={t}", enabled=progress and len(panelists) > 1000):
                 p.state.t = t
 
             # Decide exposures for this period
@@ -76,7 +78,7 @@ class EventGenerator:
             )
 
             # Execute decisions into events
-            for dec in decisions:
+            for dec in tqdm_wrap(decisions, total=len(decisions), desc=f"Execute t={t}", enabled=progress):
                 panelist = panelist_by_id[dec.panelist_id]
 
                 if dec.evaluate_product_ids is not None:
@@ -109,7 +111,7 @@ class EventGenerator:
                             "product_id": pid,
                             "product_display": prod.display(),
                         }
-                        if self.cfg.selection.include_product_features:
+                        if self.cfg.selection.include_features:
                             item["product_features"] = dict(prod.attributes)
                         products_shown.append(item)
 

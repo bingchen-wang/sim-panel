@@ -1,35 +1,34 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Dict, List, Optional
+
 
 from sim_panel.utils.time import utc_now_iso
+from sim_panel.utils.progress import tqdm_wrap
+from sim_panel.backends import Backend
+from sim_panel.backends.types import Message
+
 from .records import PersonaRecord
 from .render import render_persona_text_prompt
-
-
-class ChatBackend(Protocol):
-    """
-    Minimal protocol expected from backends.
-    """
-    def chat(self, *, system: str, user: str, temperature: float = 0.2) -> str:
-        ...
 
 
 @dataclass(frozen=True)
 class PersonaTextGenSettings:
     prompt_version: str = "v1"
     temperature: float = 0.2
-    model_name: Optional[str] = None  # optional metadata only
+    max_tokens: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None  # passed to backend.chat(), optional
 
 
 def ensure_persona_text(
     records: List[PersonaRecord],
     *,
-    backend: ChatBackend,
+    backend: Backend,
     settings: PersonaTextGenSettings,
     variant: str = "default",
     overwrite: bool = False,
+    progress: bool = True,
 ) -> List[PersonaRecord]:
     """
     For each record of the given variant:
@@ -39,7 +38,21 @@ def ensure_persona_text(
     Requires attributes to be present for generation.
     """
     out: List[PersonaRecord] = []
+
+    # Best-effort progress info: only meaningful when we will actually generate.
+    n_total = 0
+    n_to_generate = 0
     for r in records:
+        if r.persona_text_variant != variant:
+            continue
+        n_total += 1
+        needs_text = overwrite or (r.persona_text is None or not r.persona_text.strip())
+        if needs_text:
+            n_to_generate += 1
+
+    desc = f"Enrich personas ({n_to_generate}/{n_total})"
+
+    for r in tqdm_wrap(records, total=len(records), desc=desc, enabled=progress):
         if r.persona_text_variant != variant:
             out.append(r)
             continue
@@ -57,11 +70,19 @@ def ensure_persona_text(
         prompt = render_persona_text_prompt(
             r.attributes, prompt_version=settings.prompt_version
         )
-        persona_text = backend.chat(
-            system=prompt["system"],
-            user=prompt["user"],
+
+        messages: List[Message] = [
+            {"role": "system", "content": prompt["system"]},
+            {"role": "user", "content": prompt["user"]},
+        ]
+        
+        res = backend.chat(
+            messages,
             temperature=settings.temperature,
-        ).strip()
+            max_tokens=settings.max_tokens,
+            metadata=settings.metadata,
+        )
+        persona_text = res.content.strip()
 
         r.persona_text = persona_text
         r.text_key = None  # recompute
@@ -73,7 +94,17 @@ def ensure_persona_text(
                 "generated_at": utc_now_iso(),
                 "prompt_version": settings.prompt_version,
                 "temperature": settings.temperature,
-                "model_name": settings.model_name,
+                "max_tokens": settings.max_tokens,
+                "backend": {"name": backend.config.name, "model": res.model},
+                "usage": (
+                    {
+                        "prompt_tokens": res.usage.prompt_tokens,
+                        "completion_tokens": res.usage.completion_tokens,
+                        "total_tokens": res.usage.total_tokens,
+                    }
+                    if backend.config.return_usage
+                    else None
+                ),
             },
         }
 

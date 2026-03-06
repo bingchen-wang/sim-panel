@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping
 
 from sim_panel.config.yaml_loader import load_yaml
 from sim_panel.backends.registry import build_backend_from_dict
@@ -18,12 +17,12 @@ from sim_panel.panelists.io import save_persona_records
 from sim_panel.products.io import save_product_records
 
 
-def run_datagen_from_yaml(path: str, *, disable_enrich_after: bool = False) -> None:
+def run_datagen_from_yaml(path: str, *, disable_enrich_after: bool = False, progress: bool = True) -> None:
     d = load_yaml(path)
     cfg = datagen_config_from_dict(d)
-    run_datagen(cfg, disable_enrich_after=disable_enrich_after)
+    run_datagen(cfg, disable_enrich_after=disable_enrich_after, progress=progress)
 
-def run_datagen(cfg: DataGenConfig, *, disable_enrich_after: bool = False) -> None:
+def run_datagen(cfg: DataGenConfig, *, disable_enrich_after: bool = False, progress: bool = True) -> None:
     # Build two backend instances so their seeds can differ (if backend supports it).
     backend_personas = _build_backend_with_seed(cfg.backend, cfg.personas.seed)
     backend_products = _build_backend_with_seed(cfg.backend, cfg.products.seed)
@@ -35,6 +34,7 @@ def run_datagen(cfg: DataGenConfig, *, disable_enrich_after: bool = False) -> No
         variant=cfg.personas.persona_text_variant,
         settings=cfg.personas.llm,
         persona_id_prefix=cfg.personas.persona_id_prefix,
+        progress=progress,
     )
     write_personas_jsonl(cfg.output.personas_path, personas)
 
@@ -48,13 +48,20 @@ def run_datagen(cfg: DataGenConfig, *, disable_enrich_after: bool = False) -> No
         variant=cfg.products.display_variant,
         settings=cfg.products.llm,
         product_id_prefix=cfg.products.product_id_prefix,
+        progress=progress,
     )
     write_products_jsonl(cfg.output.products_path, products)
 
     # Optional: enrich-after (persisted)
     if (not disable_enrich_after) and cfg.enrich_after.enabled:
-        _run_enrich_after(cfg, backend_personas=backend_personas, backend_products=backend_products, personas=personas, products=products)
-
+        _run_enrich_after(
+            cfg,
+            backend_personas=backend_personas,
+            backend_products=backend_products,
+            personas=personas,
+            products=products,
+            progress=progress,
+        )
 
 def _build_backend_with_seed(backend_cfg: Dict[str, Any], seed: int) -> Backend:
     d = dict(backend_cfg)
@@ -69,6 +76,7 @@ def _run_enrich_after(
     backend_products: Backend,
     personas,
     products,
+    progress: bool,
 ) -> None:
     # Panelist text enrichment
     p_block = cfg.enrich_after.panelists or {}
@@ -90,6 +98,7 @@ def _run_enrich_after(
         settings=p_settings,
         variant=cfg.personas.persona_text_variant,
         overwrite=pr_overwrite,
+        progress=progress,
     )
     save_persona_records(pr_save_path, personas2)
 
@@ -116,6 +125,7 @@ def _run_enrich_after(
         settings=prod_settings,
         variant=cfg.products.display_variant,
         overwrite=pd_overwrite,
+        progress=progress,
     )
     save_product_records(pd_save_path, products2)
 

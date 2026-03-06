@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import json
 import os
 from dataclasses import asdict, is_dataclass, replace
@@ -52,6 +53,11 @@ def _build_parser() -> argparse.ArgumentParser:
     md = sub.add_parser("make-data", help="Generate demo personas/products datasets from a data_gen YAML config")
     md.add_argument("--config", required=True, help="Path to data_gen YAML config")
     md.add_argument("--no-enrich-after", action="store_true", help="Disable enrich_after even if enabled in YAML")
+    md.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable progress display (tqdm if installed).",
+    )
 
     # generate
     g = sub.add_parser("generate", help="Generate events from a YAML config")
@@ -66,6 +72,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--no-validate",
         action="store_true",
         help="Skip schema validation after generation",
+    )
+    g.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable progress display (tqdm if installed).",
     )
 
     # validate
@@ -93,7 +104,16 @@ def _cmd_make_data(args: argparse.Namespace) -> int:
     personas_path = out.get("personas_path")
     products_path = out.get("products_path")
 
-    run_datagen_from_yaml(args.config, disable_enrich_after=bool(args.no_enrich_after))
+    _progress_note(
+        "make-data",
+        enabled=not bool(args.no_progress),
+        extra="(install tqdm for a nicer progress bar)" if not _has_tqdm() else "",
+    )
+    run_datagen_from_yaml(
+        args.config,
+        disable_enrich_after=bool(args.no_enrich_after),
+        progress=not bool(args.no_progress),
+    )
 
     if isinstance(personas_path, str):
         print(f"Wrote: {personas_path}")
@@ -129,6 +149,12 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     if args.no_validate:
         new_cfg = replace(generator.cfg, validate_on_finish=False)
         generator = EventGenerator(new_cfg)
+
+    _progress_note(
+        "generate",
+        enabled=not bool(args.no_progress),
+        extra="(install tqdm for a nicer progress bar)" if not _has_tqdm() else "",
+    )
 
     rows = generator.generate(panelists=bundle.panelists, products=bundle.products)
 
@@ -279,6 +305,26 @@ def _to_jsonable(obj: Any) -> Any:
     if isinstance(obj, (list, tuple)):
         return [_to_jsonable(x) for x in obj]
     return repr(obj)
+
+def _has_tqdm() -> bool:
+    try:
+        import tqdm  # type: ignore
+        return True
+    except Exception:
+        return False
+
+
+def _progress_note(kind: str, *, enabled: bool, extra: str = "") -> None:
+    """
+    Print a one-line progress note. Real progress bars happen in data_gen/enrich/generators.
+    This avoids changing generator internals from the CLI layer.
+    """
+    if not enabled:
+        return
+    msg = f"[{kind}] running"
+    if extra:
+        msg = f"{msg} {extra}"
+    print(msg, file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":

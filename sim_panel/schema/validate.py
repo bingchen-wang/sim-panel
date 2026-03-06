@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+from textwrap import shorten
 
 from pydantic import ValidationError
 
@@ -27,6 +28,29 @@ class ValidationReport:
     def ok(self) -> bool:
         return self.n_invalid == 0
 
+    def summary(self, *, max_errors: int = 10, max_message_chars: int = 300) -> str:
+        """
+        Human-readable summary for logs/CLI/errors.
+        """
+        head = (
+            f"ValidationReport(schema_version={self.schema_version!r}, "
+            f"n_rows={self.n_rows}, n_valid={self.n_valid}, n_invalid={self.n_invalid})"
+        )
+        parts: List[str] = [head]
+
+        if self.errors:
+            n_show = min(max_errors, len(self.errors))
+            lines: List[str] = []
+            for e in self.errors[:n_show]:
+                msg = shorten(e.message.replace("\n", " "), width=max_message_chars, placeholder="…")
+                lines.append(f"row {e.index}: {msg}")
+            more = f" (+{len(self.errors) - n_show} more)" if len(self.errors) > n_show else ""
+            parts.append("Errors:\n- " + "\n- ".join(lines) + more)
+
+        if self.warnings:
+            parts.append("Warnings:\n- " + "\n- ".join(self.warnings))
+
+        return "\n".join(parts)
 
 def validate_rows(
     rows: Iterable[Dict[str, Any]],

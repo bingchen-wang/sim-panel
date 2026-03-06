@@ -40,7 +40,6 @@ class EventV0_1_0(BaseModel):
 
     # panel/time keys
     panelist_id: str
-    product_id: str
     t: int = Field(..., ge=0, description="Period index (0-based).")
 
 
@@ -67,19 +66,12 @@ class EventV0_1_0(BaseModel):
     )
     product_display: Optional[str] = Field(
         default=None,
-        min_length=1,
         description="Panelist-facing display text (required for evaluation rows).",
     )
 
     # optional feature payloads (JSON; can be {})
     panelist_features: JSONObject = Field(default_factory=dict)
     product_features: JSONObject = Field(default_factory=dict)
-
-    product_display: str = Field(
-        ...,
-        description="What the panelist sees. It may be enriched text (distinct from internal product_id).",
-        min_length=1,
-    )
 
     # flexible outcomes / traces (scalar or panel or nested)
     outcomes: Optional[JSONObject] = Field(
@@ -106,7 +98,7 @@ class EventV0_1_0(BaseModel):
             # selection rows must NOT include evaluation-only fields
             if any(
                 x is not None
-                for x in (self.product_id, self.product_display, self.outcomes, self.traces)
+                for x in (self.product_id, self.product_display, self.outcomes)
             ):
                 raise ValueError("selection event must not include product_id/product_display/outcomes/traces.")
 
@@ -154,5 +146,7 @@ COLUMNS: List[ColumnSpec] = [
     {"name": "panelist_features", "dtype": "json", "required": True, "description": "Panelist features JSON (may be {})."},
     {"name": "product_features", "dtype": "json", "required": True, "description": "Product features JSON (may be {})."},
     {"name": "outcomes", "dtype": "json", "required": False, "description": "Outcome(s) JSON (evaluation rows only)."},
-    {"name": "traces", "dtype": "json", "required": False, "description": "Trace(s) JSON (evaluation rows only)."},
+    {"name": "traces", "dtype": "json", "required": False, "description": "Trace(s) JSON."},
 ]
+
+EventV0_1_0.model_rebuild()

@@ -81,7 +81,9 @@ def build_run_from_dict(d: Mapping[str, Any], *, config_path: Optional[str] = No
     selection_cfg_raw = _get_mapping(d, "selection", default={})
     selection_cfg = SelectionConfig(
         allow_empty=_get_bool(selection_cfg_raw, "allow_empty", default=True),
-        include_product_features=_get_bool(selection_cfg_raw, "include_product_features", default=True),
+        # NOTE: SelectionConfig uses `include_features` (product features only).
+        # Keep YAML key `include_product_features` for readability/back-compat.
+        include_features=_get_bool(selection_cfg_raw, "include_product_features", default=True),
         require_json_only=_get_bool(selection_cfg_raw, "require_json_only", default=True),
         max_selected_soft=_get_optional_int(selection_cfg_raw, "max_selected_soft", default=None),
         include_raw_text=_get_bool(selection_cfg_raw, "include_raw_text", default=True),

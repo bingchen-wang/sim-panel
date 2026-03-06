@@ -13,14 +13,14 @@ output:
   products_path: data/products_beer_demo.jsonl
 
 personas:
-  n: 20
+  n: 10
   seed: 101
   persona_text_variant: default
   persona_id_prefix: p
   llm:
     prompt_version: v1
     temperature: 0.2
-    max_tokens: 1600
+    max_tokens: 4096
     batch_size: 10
     max_retries: 2
     require_json_only: true
@@ -34,7 +34,7 @@ products:
   llm:
     prompt_version: v1
     temperature: 0.2
-    max_tokens: 1800
+    max_tokens: 4096
     batch_size: 10
     max_retries: 2
     require_json_only: true

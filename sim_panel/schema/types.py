@@ -1,9 +1,16 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
+from typing import Dict, List, Literal, Optional, Union, TypedDict
+
+from pydantic import RootModel
 
 JSONScalar = Union[str, int, float, bool, None]
-JSONValue = Union[JSONScalar, List["JSONValue"], Dict[str, "JSONValue"]]
+
+class JSONValue(RootModel[Union[JSONScalar, List["JSONValue"], Dict[str, "JSONValue"]]]):
+    pass
+
+JSONValue.model_rebuild()
+
 JSONObject = Dict[str, JSONValue]
 
 PolicyName = Literal["random", "manual", "self_selection"]
