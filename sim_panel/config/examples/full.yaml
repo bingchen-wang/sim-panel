@@ -1,0 +1,178 @@
+# Full configuration template (covers all currently supported YAML blocks).
+#
+# Notes:
+# - Choose ONE policy by setting policy.name to: random | manual | self_selection
+# - If panelists/products enrichment is enabled OR outcomes_model.name=llm, backend is required.
+# - Enrichment can save in place (default) or to a separate file.
+
+# Optional: where the CLI writes outputs by default (CLI can override via --output-dir).
+output_dir: outputs/run
+
+backend:
+  name: ollama
+  model: llama3.1
+  return_usage: true
+  seed: 0
+  # Any extra provider-specific knobs can go here (folded into BackendConfig.params):
+  params:
+    base_url: "http://localhost:11434"
+    timeout_s: 60
+
+generator:
+  schema_version: "0.1.0"
+  seed: 123
+  n_periods: 3
+  validate_on_finish: true
+  max_errors: 50
+  event_namespace: "sim_panel.v0"
+  # Optional: small metadata merged into every event row (if you later expose it in GeneratorConfig)
+  # row_meta:
+  #   project: "demo"
+  #   run_tag: "full-config"
+
+panelists:
+  source: data/personas.jsonl
+  variant: default
+
+  # Persisted enrichment for persona_text (YAML-governed)
+  enrich:
+    enabled: true
+    overwrite: false
+    # Save behavior:
+    # - in_place: overwrite panelists.source (default)
+    # - {path: ...}: write to separate file
+    save:
+      path: data/personas.enriched.jsonl
+      # save: in_place
+
+    settings:
+      prompt_version: v1
+      temperature: 0.2
+      max_tokens: 600
+      metadata:
+        module: panelists.enrich
+
+  # Default LLM call settings used by Panelist.evaluate()
+  eval_settings:
+    temperature: 0.2
+    max_tokens: 800
+    metadata:
+      module: panelists.evaluate
+
+  # Default LLM call settings used by Panelist.select()
+  select_settings:
+    temperature: 0.2
+    max_tokens: 500
+    metadata:
+      module: panelists.select
+
+products:
+  source: data/products.jsonl
+  variant: default
+
+  # Persisted enrichment for product display_text (YAML-governed)
+  enrich:
+    enabled: true
+    overwrite: false
+    save: in_place
+    # save:
+    #   path: data/products.enriched.jsonl
+
+    settings:
+      prompt_version: v1
+      campaign: "demo-campaign"
+      tone: neutral
+      length: short
+      temperature: 0.2
+      max_tokens: 300
+      metadata:
+        module: products.enrich
+
+policy:
+  # Choose ONE:
+  #   - random
+  #   - manual
+  #   - self_selection
+  name: random
+
+  # Shared (random/manual): how many products each panelist evaluates per period t
+  evals_per_period: 1
+
+  # Random policy options (used when name: random)
+  random_mode: balanced_quota   # balanced_quota | iid_probs
+  # product_probs:              # only used for iid_probs (mapping product_id -> weight/prob)
+  #   prod_001: 0.7
+  #   prod_002: 0.3
+
+  # Self-selection exposure options (used when name: self_selection)
+  # Default behavior: show all products (choice_set_size: null)
+  choice_set_size: null          # int | null
+  allow_empty_selection: true
+
+  # Manual policy options (used when name: manual)
+  manual:
+    format: csv_long             # csv_long | json
+    path: data/manual_assignments.csv
+    on_unknown: error            # error | drop
+    panelist_id_col: panelist_id
+    product_id_col: product_id
+    t_col: t
+    default_t: 0
+
+selection:
+  # Selection prompt + parsing behavior (decisions/)
+  allow_empty: true
+  include_product_features: true
+  require_json_only: true
+  max_selected_soft: null        # optional soft hint only (not a hard constraint)
+  include_raw_text: true         # store raw selection text in SelectionResult (debug)
+
+execution:
+  # Generator-side operational rules (NOT panelist constraints)
+  enforce_subset_of_choice_set: true
+  max_evals_per_panelist_per_t: null   # None/unlimited; set an int to cap execution
+  allow_empty: true
+  keep_strategy: keep_first
+
+outcomes_model:
+  # Choose: deterministic | llm
+  name: llm
+  temperature: 0.2
+  max_tokens: 900
+  include_raw_text: true
+
+questionnaire:
+  outcomes:
+    fields:
+      rating:
+        type: int
+        choices: [1, 2, 3, 4, 5]
+        question: "Overall, how much do you like this product?"
+        instruction: "Pick one integer."
+        required: true
+
+      purchase_intent:
+        type: categorical
+        choices: ["no", "maybe", "yes"]
+        question: "How likely are you to purchase this product in the next 30 days?"
+        instruction: "Choose one option."
+        required: true
+
+      price_sensitivity:
+        type: categorical
+        choices: ["low", "medium", "high"]
+        question: "How price-sensitive are you for products of this type?"
+        instruction: "Choose one option."
+        required: false
+
+  traces:
+    fields:
+      review_text:
+        type: text
+        question: "Write a short review in 2–4 sentences (mention one pro and one con)."
+        required: false
+
+      rationale:
+        type: text
+        question: "Briefly explain the reasons behind your answers."
+        required: false

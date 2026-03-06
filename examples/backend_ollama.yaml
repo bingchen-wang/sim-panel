@@ -1,0 +1,8 @@
+backend:
+  name: ollama
+  model: gemma3:12b
+  seed: 0
+  return_usage: false
+  params:
+    base_url: http://localhost:11434
+    timeout_s: 60

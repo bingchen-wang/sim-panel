@@ -1,0 +1,7 @@
+panelists:
+  eval:
+    temperature: 0.2
+    max_tokens: 512
+    metadata:
+      module: panelist_eval
+      purpose: battery_eval

@@ -1,0 +1,54 @@
+# sim_panel/config/examples/minimal.yaml
+# Minimal config for CI / quick local smoke tests.
+# - No backend required (deterministic outcomes)
+# - No enrichment
+# - Random policy (balanced quota)
+
+output_dir: outputs/run_minimal
+
+generator:
+  schema_version: "0.1.0"
+  seed: 0
+  n_periods: 2
+  validate_on_finish: true
+  max_errors: 50
+  event_namespace: "sim_panel.v0"
+
+panelists:
+  source: data/personas.jsonl
+  variant: default
+
+products:
+  source: data/products.jsonl
+  variant: default
+
+policy:
+  name: random
+  evals_per_period: 1
+  random_mode: balanced_quota
+
+selection:
+  allow_empty: true
+  include_product_features: false
+  require_json_only: true
+  max_selected_soft: null
+  include_raw_text: false
+
+execution:
+  enforce_subset_of_choice_set: true
+  max_evals_per_panelist_per_t: null
+  allow_empty: true
+  keep_strategy: keep_first
+
+outcomes_model:
+  name: deterministic
+  include_raw_text: false
+
+questionnaire:
+  outcomes:
+    fields:
+      rating:
+        type: int
+        choices: [1, 2, 3, 4, 5]
+        question: "Overall rating?"
+        required: true

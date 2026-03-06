@@ -1,0 +1,8 @@
+backend:
+  name: server
+  model: Qwen/Qwen2.5-7B-Instruct   # whatever the server expects
+  seed: 0
+  return_usage: true
+  params:
+    base_url: http://<server-node>:8000/v1
+    timeout_s: 120

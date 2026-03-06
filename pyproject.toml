@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sim-panel"
+version = "0.0.1"
+description = "Synthetic customer-product interaction data generator."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sim_panel*"]
+
+[project.scripts]
+sim-panel = "sim_panel.cli.main:main"
