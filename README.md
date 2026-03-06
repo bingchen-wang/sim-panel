@@ -1,7 +1,14 @@
-# sim-panel
-> Current version: IRP-v0 (Internal research prototype, 3 March, 2026)
+# SIM-PANEL — Synthetic Panelists for Product Reviews
 
-`sim-panel` generates **schema-validated** synthetic panelist–product interaction datasets for LLM agent-based simulation projects.
+<p align="center">
+  <img src="assets/logo.svg" alt="sim-panel logo" width="500"/>
+</p>
+
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
+> Current version: IRP-v0 (Internal research prototype, 7 March, 2026)
+
+**SIM-PANEL** generates **schema-validated** synthetic panelist–product interaction datasets for LLM agent-based simulation projects.
 
 
 ## Concepts
@@ -325,3 +332,5 @@ sim-panel make-data --config sim_panel/data_gen/examples/beer_demo.yaml
 
 For module-level details and invariants, see `developer_manual.md`.
 
+## License
+Apache-2.0. See `LICENSE` (and `NOTICE`).
