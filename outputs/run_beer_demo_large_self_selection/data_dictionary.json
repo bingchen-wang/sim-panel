@@ -1,0 +1,201 @@
+{
+  "components": {
+    "execution_rules": {
+      "allow_empty": true,
+      "enforce_subset_of_choice_set": true,
+      "keep_strategy": "keep_first",
+      "max_evals_per_panelist_per_t": 3
+    },
+    "generator_config": {
+      "event_namespace": "sim_panel.v0",
+      "execution": {
+        "rules": {
+          "allow_empty": true,
+          "enforce_subset_of_choice_set": true,
+          "keep_strategy": "keep_first",
+          "max_evals_per_panelist_per_t": 3
+        }
+      },
+      "include_panelist_features_in_events": true,
+      "include_product_features_in_events": true,
+      "include_product_features_in_selection_prompt": true,
+      "max_errors": 50,
+      "n_periods": 1,
+      "outcome": {
+        "include_raw_text": true,
+        "max_tokens": 900,
+        "name": "llm",
+        "questionnaire": {
+          "outcome_fields": [
+            {
+              "choices": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "instruction": "Pick one integer.",
+              "max_value": null,
+              "min_value": null,
+              "name": "rating",
+              "question": "Overall, how much do you like this beer?",
+              "required": true,
+              "type": "int"
+            },
+            {
+              "choices": [
+                "no",
+                "maybe",
+                "yes"
+              ],
+              "instruction": "Choose one option.",
+              "max_value": null,
+              "min_value": null,
+              "name": "purchase_intent",
+              "question": "How likely are you to purchase this beer in the next 30 days?",
+              "required": true,
+              "type": "categorical"
+            },
+            {
+              "choices": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "instruction": "Pick one integer (1=not bitter, 5=very bitter).",
+              "max_value": null,
+              "min_value": null,
+              "name": "bitterness",
+              "question": "How bitter does this beer taste to you?",
+              "required": false,
+              "type": "int"
+            }
+          ],
+          "trace_fields": [
+            {
+              "choices": null,
+              "instruction": null,
+              "max_value": null,
+              "min_value": null,
+              "name": "rationale",
+              "question": "Briefly explain your answers.",
+              "required": false,
+              "type": "text"
+            }
+          ]
+        },
+        "temperature": 0.2
+      },
+      "policy": {
+        "allow_empty_selection": true,
+        "choice_set_size": null,
+        "evals_per_period": 1,
+        "manual_assignment_fn": null,
+        "name": "self_selection",
+        "product_probs": null,
+        "random_mode": "balanced_quota"
+      },
+      "row_meta": {},
+      "schema_version": "0.1.0",
+      "seed": 101,
+      "selection": {
+        "allow_empty": true,
+        "include_features": true,
+        "include_raw_text": true,
+        "max_selected_soft": 5,
+        "require_json_only": true
+      },
+      "validate_on_finish": true
+    },
+    "outcome_config": {
+      "include_raw_text": true,
+      "max_tokens": 900,
+      "name": "llm",
+      "questionnaire": {
+        "outcome_fields": [
+          {
+            "choices": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "instruction": "Pick one integer.",
+            "max_value": null,
+            "min_value": null,
+            "name": "rating",
+            "question": "Overall, how much do you like this beer?",
+            "required": true,
+            "type": "int"
+          },
+          {
+            "choices": [
+              "no",
+              "maybe",
+              "yes"
+            ],
+            "instruction": "Choose one option.",
+            "max_value": null,
+            "min_value": null,
+            "name": "purchase_intent",
+            "question": "How likely are you to purchase this beer in the next 30 days?",
+            "required": true,
+            "type": "categorical"
+          },
+          {
+            "choices": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "instruction": "Pick one integer (1=not bitter, 5=very bitter).",
+            "max_value": null,
+            "min_value": null,
+            "name": "bitterness",
+            "question": "How bitter does this beer taste to you?",
+            "required": false,
+            "type": "int"
+          }
+        ],
+        "trace_fields": [
+          {
+            "choices": null,
+            "instruction": null,
+            "max_value": null,
+            "min_value": null,
+            "name": "rationale",
+            "question": "Briefly explain your answers.",
+            "required": false,
+            "type": "text"
+          }
+        ]
+      },
+      "temperature": 0.2
+    },
+    "policy_config": {
+      "allow_empty_selection": true,
+      "choice_set_size": null,
+      "evals_per_period": 1,
+      "manual_assignment_fn": null,
+      "name": "self_selection",
+      "product_probs": null,
+      "random_mode": "balanced_quota"
+    },
+    "selection_config": {
+      "allow_empty": true,
+      "include_features": true,
+      "include_raw_text": true,
+      "max_selected_soft": 5,
+      "require_json_only": true
+    }
+  },
+  "generated_at_utc": "2026-03-07T08:44:01+00:00",
+  "notes": "Auto-generated by sim-panel CLI.",
+  "schema_version": "0.1.0"
+}

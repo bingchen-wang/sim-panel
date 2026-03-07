@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from sim_panel.data_gen.nonce import make_nonce
+from sim_panel.utils.progress import tqdm_wrap
 from sim_panel.backends import Backend
 from sim_panel.backends.types import Message
 from sim_panel.products.records import ProductRecord
@@ -20,6 +22,7 @@ def generate_beer_product_records_llm(
     settings: LLMGenSettings = LLMGenSettings(),
     schema_version: str = "0.1.0",
     product_id_prefix: str = "prod",
+    progress: bool = True,
 ) -> List[ProductRecord]:
     """
     Generate beer ProductRecords using an LLM backend.
@@ -35,13 +38,18 @@ def generate_beer_product_records_llm(
     cursor = 0
     batch_idx = 0
 
-    while cursor < n_products:
+    total_batches = (n_products + batch_size - 1) // batch_size
+    for _ in tqdm_wrap(range(total_batches), total=total_batches, desc="Generate products", enabled=progress):
+        if cursor >= n_products:
+            break
         k = min(batch_size, n_products - cursor)
         batch_seed = seed + 10_000 + batch_idx
         payload = _call_products_batch(
             backend=backend,
             n=k,
             seed=batch_seed,
+            base_seed=seed,
+            batch_idx=batch_idx,
             settings=settings,
         )
         products = _parse_products_payload(payload, k_expected=k)
@@ -72,11 +80,24 @@ def generate_beer_product_records_llm(
     return out
 
 
-def _call_products_batch(*, backend: Backend, n: int, seed: int, settings: LLMGenSettings) -> str:
-    prompt = render_beer_products_prompt(n=n)
+def _call_products_batch(
+    *,
+    backend: Backend,
+    n: int,
+    seed: int,
+    base_seed: int,
+    batch_idx: int,
+    settings: LLMGenSettings,
+) -> str:
+    # Backward-compatible: nonce is optional and controlled by settings.use_nonce (default False).
+    nonce = make_nonce(kind="products_beer", seed=base_seed, batch_idx=batch_idx) if getattr(settings, "use_nonce", False) else None
+    prompt = render_beer_products_prompt(n=n, nonce=nonce)
+
     md = {} if settings.metadata is None else dict(settings.metadata)
     md.setdefault("module", "data_gen.products_beer")
     md.setdefault("seed", seed)
+    md.setdefault("base_seed", base_seed)
+    md.setdefault("batch_idx", batch_idx)    
     md.setdefault("batch_size", n)
 
     messages: List[Message] = [

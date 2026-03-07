@@ -1,0 +1,66 @@
+# Example run config: beer demo + manual assignment policy (LLM-based evaluation)
+
+output_dir: outputs/run_beer_demo_manual
+
+backend:
+  name: ollama
+  model: gemma3:12b
+  return_usage: true
+  params:
+    base_url: "http://localhost:11434"
+    timeout_s: 60
+
+generator:
+  schema_version: "0.1.0"
+  seed: 101
+  n_periods: 2
+  validate_on_finish: true
+  max_errors: 50
+  event_namespace: "sim_panel.v0"
+
+panelists:
+  source: data/personas_beer_demo.jsonl
+  variant: default
+  eval_settings:
+    temperature: 0.2
+    max_tokens: 900
+    metadata: {module: panelists.evaluate}
+
+products:
+  source: data/products_beer_demo.jsonl
+  variant: default
+
+policy:
+  name: manual
+  manual:
+    path: data/manual_beer_demo.csv
+    format: csv_long  # (panelist_id, t, product_id). t may be omitted -> defaults to 0.
+    allow_missing: false   # if a (panelist,t) is missing, raise
+
+outcomes_model:
+  name: llm
+  temperature: 0.2
+  max_tokens: 900
+  include_raw_text: true
+
+questionnaire:
+  outcomes:
+    fields:
+      rating:
+        type: int
+        choices: [1, 2, 3, 4, 5]
+        question: "Overall, how much do you like this beer?"
+        instruction: "Pick one integer."
+        required: true
+      purchase_intent:
+        type: categorical
+        choices: ["no", "maybe", "yes"]
+        question: "How likely are you to purchase this beer in the next 30 days?"
+        instruction: "Choose one option."
+        required: true
+  traces:
+    fields:
+      rationale:
+        type: text
+        question: "Briefly explain your answers."
+        required: false

@@ -23,3 +23,7 @@ class LLMGenSettings:
 
     # If True, we require the LLM output to be JSON-only. If False, we will attempt to extract JSON.
     require_json_only: bool = True
+
+    # If True, inject a per-batch nonce into the system prompt to change output distribution.
+    # Default False keeps old behavior.
+    use_nonce: bool = False

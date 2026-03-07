@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from sim_panel.data_gen.nonce import make_nonce
+from sim_panel.utils.progress import tqdm_wrap
 from sim_panel.backends import Backend
 from sim_panel.backends.types import Message
 from sim_panel.panelists.records import PersonaRecord
@@ -20,6 +22,7 @@ def generate_persona_records_llm(
     settings: LLMGenSettings = LLMGenSettings(),
     schema_version: str = "0.1.0",
     persona_id_prefix: str = "p",
+    progress: bool = True,
 ) -> List[PersonaRecord]:
     """
     Generate spec-only PersonaRecords using an LLM backend.
@@ -35,13 +38,18 @@ def generate_persona_records_llm(
     cursor = 0
     batch_idx = 0
 
-    while cursor < n_personas:
+    total_batches = (n_personas + batch_size - 1) // batch_size
+    for _ in tqdm_wrap(range(total_batches), total=total_batches, desc="Generate personas", enabled=progress):
+        if cursor >= n_personas:
+            break
         k = min(batch_size, n_personas - cursor)
         batch_seed = seed + batch_idx
         payload = _call_personas_batch(
             backend=backend,
             n=k,
             seed=batch_seed,
+            batch_idx=batch_idx,
+            base_seed=seed,
             settings=settings,
         )
         personas = _parse_personas_payload(payload, k_expected=k)
@@ -68,11 +76,24 @@ def generate_persona_records_llm(
     return out
 
 
-def _call_personas_batch(*, backend: Backend, n: int, seed: int, settings: LLMGenSettings) -> str:
-    prompt = render_personas_prompt(n=n)
+def _call_personas_batch(
+    *,
+    backend: Backend,
+    n: int,
+    seed: int,
+    base_seed: int,
+    batch_idx: int,
+    settings: LLMGenSettings,
+) -> str:
+    # Backward-compatible: nonce is optional and controlled by settings.use_nonce (default False).
+    nonce = make_nonce(kind="personas", seed=base_seed, batch_idx=batch_idx) if getattr(settings, "use_nonce", False) else None
+    prompt = render_personas_prompt(n=n, nonce=nonce)
+
     md = {} if settings.metadata is None else dict(settings.metadata)
     md.setdefault("module", "data_gen.personas")
     md.setdefault("seed", seed)
+    md.setdefault("base_seed", base_seed)
+    md.setdefault("batch_idx", batch_idx)    
     md.setdefault("batch_size", n)
 
     messages: List[Message] = [
