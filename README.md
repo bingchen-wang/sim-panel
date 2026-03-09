@@ -330,7 +330,7 @@ Suggested command:
 sim-panel make-data --config sim_panel/data_gen/examples/beer_demo.yaml
 ```
 
-For module-level details and invariants, see `developer_manual.md`.
+For module-level details and invariants, see the [Developer Manual](developer_manual.md).
 
 ## License
 Apache-2.0. See `LICENSE` (and `NOTICE`).
