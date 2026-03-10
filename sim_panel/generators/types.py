@@ -53,5 +53,8 @@ class GeneratorConfig:
     # deterministic id namespace
     event_namespace: str = "sim_panel.v0"
 
+    # parallelism: number of concurrent decision workers (1 = sequential)
+    max_workers: int = 1
+
     # small metadata merged into each row
     row_meta: Dict[str, Any] = field(default_factory=dict)

@@ -25,6 +25,7 @@ generator:
   validate_on_finish: true
   max_errors: 50
   event_namespace: "sim_panel.v0"
+  max_workers: 8              # concurrent decision workers (1 = sequential)
   # Optional: small metadata merged into every event row (if you later expose it in GeneratorConfig)
   # row_meta:
   #   project: "demo"

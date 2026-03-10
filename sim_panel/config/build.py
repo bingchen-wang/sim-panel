@@ -72,6 +72,7 @@ def build_run_from_dict(d: Mapping[str, Any], *, config_path: Optional[str] = No
     validate_on_finish = _get_bool(gen_cfg_raw, "validate_on_finish", default=True)
     max_errors = _get_int(gen_cfg_raw, "max_errors", default=50)
     event_namespace = _get_str(gen_cfg_raw, "event_namespace", default="sim_panel.v0")
+    max_workers = _get_int(gen_cfg_raw, "max_workers", default=1)
 
     # --- policy config (required) ---
     policy_cfg_raw = _require_mapping(d, "policy")
@@ -194,6 +195,7 @@ def build_run_from_dict(d: Mapping[str, Any], *, config_path: Optional[str] = No
         validate_on_finish=validate_on_finish,
         max_errors=max_errors,
         event_namespace=event_namespace,
+        max_workers=max_workers,
     )
 
     generator = EventGenerator(gen_cfg)

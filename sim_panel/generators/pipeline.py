@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import concurrent.futures
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -78,115 +79,158 @@ class EventGenerator:
             )
 
             # Execute decisions into events
-            for dec in tqdm_wrap(decisions, total=len(decisions), desc=f"Execute t={t}", enabled=progress):
-                panelist = panelist_by_id[dec.panelist_id]
+            use_parallel = self.cfg.max_workers > 1 and len(decisions) > 1
 
-                if dec.evaluate_product_ids is not None:
-                    # random/manual: directly evaluate assigned products
-                    for prod_id in dec.evaluate_product_ids:
-                        prod = product_by_id.get(prod_id)
-                        if prod is None:
-                            raise ValueError(f"Policy assigned unknown product_id={prod_id!r}")
-                        rows.append(
-                            self._emit_evaluation_event(
-                                panelist=panelist,
-                                product=prod,
-                                t=t,
-                                selection_id=None,
-                                outcome_model=outcome_model,
-                            )
+            if use_parallel:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=self.cfg.max_workers) as pool:
+                    futures = {
+                        pool.submit(
+                            self._execute_decision,
+                            dec=dec,
+                            panelist=panelist_by_id[dec.panelist_id],
+                            product_by_id=product_by_id,
+                            t=t,
+                            outcome_model=outcome_model,
+                        ): dec
+                        for dec in decisions
+                    }
+                    for future in tqdm_wrap(
+                        concurrent.futures.as_completed(futures),
+                        total=len(futures),
+                        desc=f"Execute t={t}",
+                        enabled=progress,
+                    ):
+                        rows.extend(future.result())
+            else:
+                for dec in tqdm_wrap(decisions, total=len(decisions), desc=f"Execute t={t}", enabled=progress):
+                    rows.extend(
+                        self._execute_decision(
+                            dec=dec,
+                            panelist=panelist_by_id[dec.panelist_id],
+                            product_by_id=product_by_id,
+                            t=t,
+                            outcome_model=outcome_model,
                         )
-                    continue
-
-                if dec.selection is not None:
-                    # self_selection: show choice_set, let panelist request any number, then apply execution rules
-                    choice_set = list(dec.selection.choice_set)
-
-                    products_shown: List[Dict[str, Any]] = []
-                    for pid in choice_set:
-                        prod = product_by_id.get(pid)
-                        if prod is None:
-                            continue
-                        item: Dict[str, Any] = {
-                            "product_id": pid,
-                            "product_display": prod.display(),
-                        }
-                        if self.cfg.selection.include_features:
-                            item["product_features"] = dict(prod.attributes)
-                        products_shown.append(item)
-
-                    sel_ctx = SelectionContext(
-                        panelist_id=panelist.panelist_id,
-                        t=t,
-                        products_shown=products_shown,
                     )
-                    sel_prompt = render_selection_prompt(ctx=sel_ctx, cfg=self.cfg.selection)
-
-                    raw_sel = panelist.select(
-                        task_prompt=sel_prompt,
-                        choice_set=choice_set,
-                        metadata={"module": "generators.selection", "policy": self.cfg.policy.name, "t": t},
-                    )
-
-                    parsed_sel = parse_selection_response(
-                        raw_text=raw_sel,
-                        choice_set_ids=choice_set,
-                        cfg=self.cfg.selection,
-                    )
-
-                    # Emit selection event (records free-will request)
-                    sel_row = self._emit_selection_event(
-                        panelist_id=panelist.panelist_id,
-                        t=t,
-                        choice_set=choice_set,
-                        selected_product_ids=parsed_sel.requested_product_ids,
-                        selection_traces=parsed_sel.traces,
-                        selection_errors=parsed_sel.errors,
-                    )
-                    rows.append(sel_row)
-                    selection_id = sel_row["event_id"]
-
-                    executed, dropped = apply_execution_rules(
-                        requested_product_ids=parsed_sel.requested_product_ids,
-                        choice_set_ids=choice_set,
-                        rules=self.cfg.execution.rules,
-                    )
-
-                    if not self.cfg.execution.rules.allow_empty and len(executed) == 0 and len(choice_set) > 0:
-                        # v0 fallback: evaluate the first shown item deterministically
-                        executed = [choice_set[0]]
-
-                    # Evaluate executed subset
-                    for prod_id in executed:
-                        prod = product_by_id.get(prod_id)
-                        if prod is None:
-                            continue
-                        rows.append(
-                            self._emit_evaluation_event(
-                                panelist=panelist,
-                                product=prod,
-                                t=t,
-                                selection_id=selection_id,
-                                outcome_model=outcome_model,
-                            )
-                        )
-
-                    # Store operational details as traces on the selection row
-                    if dropped or executed:
-                        sel_row.setdefault("traces", {})
-                        if isinstance(sel_row["traces"], dict):
-                            if dropped:
-                                sel_row["traces"]["dropped_product_ids"] = dropped
-                            sel_row["traces"]["executed_product_ids"] = executed
-
-                    continue
-
-                raise ValueError("ExposureDecision must have either evaluate_product_ids or selection.")
 
         if self.cfg.validate_on_finish:
             self._validate(rows)
 
         return rows
+
+    def _execute_decision(
+        self,
+        *,
+        dec: ExposureDecision,
+        panelist: Panelist,
+        product_by_id: Dict[str, Product],
+        t: int,
+        outcome_model: Optional[Any],
+    ) -> List[Dict[str, Any]]:
+        """Process a single ExposureDecision and return the resulting event rows."""
+        result_rows: List[Dict[str, Any]] = []
+
+        if dec.evaluate_product_ids is not None:
+            # random/manual: directly evaluate assigned products
+            for prod_id in dec.evaluate_product_ids:
+                prod = product_by_id.get(prod_id)
+                if prod is None:
+                    raise ValueError(f"Policy assigned unknown product_id={prod_id!r}")
+                result_rows.append(
+                    self._emit_evaluation_event(
+                        panelist=panelist,
+                        product=prod,
+                        t=t,
+                        selection_id=None,
+                        outcome_model=outcome_model,
+                    )
+                )
+            return result_rows
+
+        if dec.selection is not None:
+            # self_selection: show choice_set, let panelist request any number, then apply execution rules
+            choice_set = list(dec.selection.choice_set)
+
+            products_shown: List[Dict[str, Any]] = []
+            for pid in choice_set:
+                prod = product_by_id.get(pid)
+                if prod is None:
+                    continue
+                item: Dict[str, Any] = {
+                    "product_id": pid,
+                    "product_display": prod.display(),
+                }
+                if self.cfg.selection.include_features:
+                    item["product_features"] = dict(prod.attributes)
+                products_shown.append(item)
+
+            sel_ctx = SelectionContext(
+                panelist_id=panelist.panelist_id,
+                t=t,
+                products_shown=products_shown,
+            )
+            sel_prompt = render_selection_prompt(ctx=sel_ctx, cfg=self.cfg.selection)
+
+            raw_sel = panelist.select(
+                task_prompt=sel_prompt,
+                choice_set=choice_set,
+                metadata={"module": "generators.selection", "policy": self.cfg.policy.name, "t": t},
+            )
+
+            parsed_sel = parse_selection_response(
+                raw_text=raw_sel,
+                choice_set_ids=choice_set,
+                cfg=self.cfg.selection,
+            )
+
+            # Emit selection event (records free-will request)
+            sel_row = self._emit_selection_event(
+                panelist_id=panelist.panelist_id,
+                t=t,
+                choice_set=choice_set,
+                selected_product_ids=parsed_sel.requested_product_ids,
+                selection_traces=parsed_sel.traces,
+                selection_errors=parsed_sel.errors,
+            )
+            result_rows.append(sel_row)
+            selection_id = sel_row["event_id"]
+
+            executed, dropped = apply_execution_rules(
+                requested_product_ids=parsed_sel.requested_product_ids,
+                choice_set_ids=choice_set,
+                rules=self.cfg.execution.rules,
+            )
+
+            if not self.cfg.execution.rules.allow_empty and len(executed) == 0 and len(choice_set) > 0:
+                # v0 fallback: evaluate the first shown item deterministically
+                executed = [choice_set[0]]
+
+            # Evaluate executed subset
+            for prod_id in executed:
+                prod = product_by_id.get(prod_id)
+                if prod is None:
+                    continue
+                result_rows.append(
+                    self._emit_evaluation_event(
+                        panelist=panelist,
+                        product=prod,
+                        t=t,
+                        selection_id=selection_id,
+                        outcome_model=outcome_model,
+                    )
+                )
+
+            # Store operational details as traces on the selection row
+            if dropped or executed:
+                sel_row.setdefault("traces", {})
+                if isinstance(sel_row["traces"], dict):
+                    if dropped:
+                        sel_row["traces"]["dropped_product_ids"] = dropped
+                    sel_row["traces"]["executed_product_ids"] = executed
+
+            return result_rows
+
+        raise ValueError("ExposureDecision must have either evaluate_product_ids or selection.")
 
     def _decide_for_period(
         self,
