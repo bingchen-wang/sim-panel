@@ -30,7 +30,7 @@ backend:
   model: llama3.1
   return_usage: true
   params:
-    base_url: "http://localhost:11434"
+    base_url: "http://localhost:11435"
     timeout_s: 60
 
 policy:

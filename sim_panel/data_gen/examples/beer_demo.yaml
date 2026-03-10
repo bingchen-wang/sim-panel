@@ -5,8 +5,8 @@ backend:
   model: gemma3:12b
   return_usage: true
   params:
-    base_url: "http://localhost:11434"
-    timeout_s: 60
+    base_url: "http://localhost:11435"
+    timeout_s: 120
 
 output:
   personas_path: data/personas_beer_demo.jsonl

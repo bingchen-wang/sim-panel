@@ -7,8 +7,8 @@ backend:
   model: gemma3:12b
   return_usage: true
   params:
-    base_url: "http://localhost:11434"
-    timeout_s: 60
+    base_url: "http://localhost:11435"
+    timeout_s: 120
 
 generator:
   schema_version: "0.1.0"
@@ -17,6 +17,7 @@ generator:
   validate_on_finish: true
   max_errors: 50
   event_namespace: "sim_panel.v0"
+  max_workers: 8
 
 panelists:
   source: data/personas_beer_demo.jsonl

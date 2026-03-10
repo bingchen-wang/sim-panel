@@ -15,7 +15,7 @@ backend:
   seed: 0
   # Any extra provider-specific knobs can go here (folded into BackendConfig.params):
   params:
-    base_url: "http://localhost:11434"
+    base_url: "http://localhost:11435"
     timeout_s: 60
 
 generator:
