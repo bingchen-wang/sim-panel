@@ -36,6 +36,8 @@ from sim_panel.data_gen.run import run_datagen_from_yaml
 from sim_panel.analysis import (
     build_analysis_config_from_yaml,
     run_analysis,
+    build_compare_config_from_yaml,
+    run_comparison,
 )
 
 
@@ -53,6 +55,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return _cmd_sample(args)
     if args.command == "analyze":
         return _cmd_analyze(args)
+    if args.command == "compare":
+        return _cmd_compare(args)
 
     parser.print_help()
     return 2
@@ -119,6 +123,10 @@ def _build_parser() -> argparse.ArgumentParser:
     # analyze
     a = sub.add_parser("analyze", help="Analyze a generated run from an analysis YAML config")
     a.add_argument("--config", required=True, help="Path to analysis YAML config")
+
+    # compare
+    cmp = sub.add_parser("compare", help="Compare metrics across multiple runs/conditions")
+    cmp.add_argument("--config", required=True, help="Path to comparison YAML config")
 
     return p
 
@@ -362,6 +370,28 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
 
     if "plots" in run.artifacts and isinstance(run.artifacts["plots"], dict):
         print(f"Plots generated: {len(run.artifacts['plots'])}")
+
+    return 0
+
+
+def _cmd_compare(args: argparse.Namespace) -> int:
+    cfg = build_compare_config_from_yaml(args.config)
+    artifacts = run_comparison(cfg)
+
+    n_conditions = len(cfg.conditions)
+    flat = artifacts.get("condition_metrics", [])
+    print(f"Compared {n_conditions} conditions on '{cfg.outcome_field}'")
+    print(f"Output written to: {cfg.output_dir}")
+
+    # Print a quick summary
+    for row in flat:
+        label = row.get("label", "?")
+        mean = row.get("rating_mean")
+        std = row.get("rating_std")
+        n = row.get("n_with_outcome", 0)
+        mean_s = f"{mean:.3f}" if mean is not None else "-"
+        std_s = f"{std:.3f}" if std is not None else "-"
+        print(f"  {label}: mean={mean_s}, std={std_s}, n={n}")
 
     return 0
 

@@ -1,0 +1,91 @@
+# Cross-condition comparison config for Phase 1 baselines
+# 4 models x 4 prompting strategies = 16 conditions
+
+output_dir: outputs/phase1_comparison
+outcome_field: rating
+rating_scale: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+conditions:
+  # --- Qwen 7B ---
+  - label: qwen7b_zeroshot
+    model: "Qwen 7B"
+    strategy: "zero-shot"
+    run_dir: outputs/run_qwen7b_zeroshot
+
+  - label: qwen7b_fewshot
+    model: "Qwen 7B"
+    strategy: "few-shot"
+    run_dir: outputs/run_qwen7b_fewshot
+
+  - label: qwen7b_persona
+    model: "Qwen 7B"
+    strategy: "persona"
+    run_dir: outputs/run_qwen7b_persona
+
+  - label: qwen7b_persona_cot
+    model: "Qwen 7B"
+    strategy: "persona+CoT"
+    run_dir: outputs/run_qwen7b_persona_cot
+
+  # --- Llama 3 8B ---
+  - label: llama3_zeroshot
+    model: "Llama 3 8B"
+    strategy: "zero-shot"
+    run_dir: outputs/run_llama3_zeroshot
+
+  - label: llama3_fewshot
+    model: "Llama 3 8B"
+    strategy: "few-shot"
+    run_dir: outputs/run_llama3_fewshot
+
+  - label: llama3_persona
+    model: "Llama 3 8B"
+    strategy: "persona"
+    run_dir: outputs/run_llama3_persona
+
+  - label: llama3_persona_cot
+    model: "Llama 3 8B"
+    strategy: "persona+CoT"
+    run_dir: outputs/run_llama3_persona_cot
+
+  # --- Mistral 7B ---
+  - label: mistral7b_zeroshot
+    model: "Mistral 7B"
+    strategy: "zero-shot"
+    run_dir: outputs/run_mistral7b_zeroshot
+
+  - label: mistral7b_fewshot
+    model: "Mistral 7B"
+    strategy: "few-shot"
+    run_dir: outputs/run_mistral7b_fewshot
+
+  - label: mistral7b_persona
+    model: "Mistral 7B"
+    strategy: "persona"
+    run_dir: outputs/run_mistral7b_persona
+
+  - label: mistral7b_persona_cot
+    model: "Mistral 7B"
+    strategy: "persona+CoT"
+    run_dir: outputs/run_mistral7b_persona_cot
+
+  # --- 13B model ---
+  - label: 13b_zeroshot
+    model: "13B"
+    strategy: "zero-shot"
+    run_dir: outputs/run_13b_zeroshot
+
+  - label: 13b_fewshot
+    model: "13B"
+    strategy: "few-shot"
+    run_dir: outputs/run_13b_fewshot
+
+  - label: 13b_persona
+    model: "13B"
+    strategy: "persona"
+    run_dir: outputs/run_13b_persona
+
+  - label: 13b_persona_cot
+    model: "13B"
+    strategy: "persona+CoT"
+    run_dir: outputs/run_13b_persona_cot
