@@ -17,7 +17,7 @@ generator:
   validate_on_finish: true
   max_errors: 50
   event_namespace: "sim_panel.v0"
-  max_workers: 2
+  max_workers: 16
 
 panelists:
   source: data/personas_beer_demo_large.jsonl
@@ -32,6 +32,7 @@ panelists:
       prompt_version: v1
       temperature: 0.2
       max_tokens: 600
+      max_workers: 16
       metadata: {module: panelists.enrich}
 
   select_settings:
@@ -60,6 +61,7 @@ products:
       length: short
       temperature: 0.2
       max_tokens: 320
+      max_workers: 16
       metadata: {module: products.enrich}
 
 policy:

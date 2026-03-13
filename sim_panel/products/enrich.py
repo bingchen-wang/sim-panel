@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import concurrent.futures
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sim_panel.utils.time import utc_now_iso
 from sim_panel.utils.progress import tqdm_wrap
@@ -22,6 +23,7 @@ class ProductDisplayTextGenSettings:
     campaign: Optional[str] = None
     tone: str = "neutral"            # e.g., neutral, enthusiastic, clinical
     length: str = "short"            # short|medium|long
+    max_workers: int = 1
 
 
 def render_product_display_text_prompt(
@@ -66,6 +68,56 @@ def render_product_display_text_prompt(
     return {"system": system, "user": user}
 
 
+def _enrich_one_product(
+    r: ProductRecord,
+    *,
+    backend: Backend,
+    settings: ProductDisplayTextGenSettings,
+) -> Tuple[str, Dict[str, Any]]:
+    """Generate display_text for a single record. Returns (text, provenance_entry)."""
+    prompt = render_product_display_text_prompt(
+        r,
+        prompt_version=settings.prompt_version,
+        campaign=settings.campaign,
+        tone=settings.tone,
+        length=settings.length,
+    )
+
+    messages: List[Message] = [
+        {"role": "system", "content": prompt["system"]},
+        {"role": "user", "content": prompt["user"]},
+    ]
+
+    res = backend.chat(
+        messages,
+        temperature=settings.temperature,
+        max_tokens=settings.max_tokens,
+        metadata=settings.metadata,
+    )
+    text = res.content.strip()
+
+    prov = {
+        "generated_at": utc_now_iso(),
+        "prompt_version": settings.prompt_version,
+        "campaign": settings.campaign,
+        "tone": settings.tone,
+        "length": settings.length,
+        "temperature": settings.temperature,
+        "max_tokens": settings.max_tokens,
+        "backend": {"name": backend.config.name, "model": res.model},
+        "usage": (
+            {
+                "prompt_tokens": res.usage.prompt_tokens,
+                "completion_tokens": res.usage.completion_tokens,
+                "total_tokens": res.usage.total_tokens,
+            }
+            if backend.config.return_usage
+            else None
+        ),
+    }
+    return text, prov
+
+
 def ensure_display_text(
     records: List[ProductRecord],
     *,
@@ -80,79 +132,54 @@ def ensure_display_text(
       - if display_text missing (or overwrite=True), generate from attributes (+ display_name)
       - write provenance fields
     """
-    out: List[ProductRecord] = []
+    # Partition records: those needing generation vs pass-through.
+    to_generate: List[Tuple[int, ProductRecord]] = []
+    out: List[Optional[ProductRecord]] = [None] * len(records)
 
-    # Best-effort progress info: only meaningful when we will actually generate.
-    n_total = 0
-    n_to_generate = 0
-    for r in records:
+    for i, r in enumerate(records):
         if r.display_variant != variant:
+            out[i] = r
             continue
-        n_total += 1
-        needs_text = overwrite or (r.display_text is None or not r.display_text.strip())
-        if needs_text:
-            n_to_generate += 1
-
-    desc = f"Enrich products ({n_to_generate}/{n_total})"
-
-    for r in tqdm_wrap(records, total=len(records), desc=desc, enabled=progress):
-        if r.display_variant != variant:
-            out.append(r)
-            continue
-
         needs_text = overwrite or (r.display_text is None or not r.display_text.strip())
         if not needs_text:
-            out.append(r)
+            out[i] = r
             continue
+        to_generate.append((i, r))
 
-        prompt = render_product_display_text_prompt(
-            r,
-            prompt_version=settings.prompt_version,
-            campaign=settings.campaign,
-            tone=settings.tone,
-            length=settings.length,
-        )
+    n_total = sum(1 for r in records if r.display_variant == variant)
+    desc = f"Enrich products ({len(to_generate)}/{n_total})"
 
-        messages: List[Message] = [
-            {"role": "system", "content": prompt["system"]},
-            {"role": "user", "content": prompt["user"]},
-        ]
+    use_parallel = settings.max_workers > 1 and len(to_generate) > 1
 
-        res = backend.chat(
-            messages,
-            temperature=settings.temperature,
-            max_tokens=settings.max_tokens,
-            metadata=settings.metadata,
-        )
-        text = res.content.strip()
+    if use_parallel:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=settings.max_workers) as pool:
+            future_to_idx = {
+                pool.submit(
+                    _enrich_one_product, r, backend=backend, settings=settings
+                ): (i, r)
+                for i, r in to_generate
+            }
 
-        r.display_text = text
-        r.text_key = None
-        r.compute_keys()
+            for future in tqdm_wrap(
+                concurrent.futures.as_completed(future_to_idx),
+                total=len(future_to_idx),
+                desc=desc,
+                enabled=progress,
+            ):
+                i, r = future_to_idx[future]
+                text, prov = future.result()
+                r.display_text = text
+                r.text_key = None
+                r.compute_keys()
+                r.provenance = {**r.provenance, "display_text": prov}
+                out[i] = r
+    else:
+        for i, r in tqdm_wrap(to_generate, total=len(to_generate), desc=desc, enabled=progress):
+            text, prov = _enrich_one_product(r, backend=backend, settings=settings)
+            r.display_text = text
+            r.text_key = None
+            r.compute_keys()
+            r.provenance = {**r.provenance, "display_text": prov}
+            out[i] = r
 
-        r.provenance = {
-            **r.provenance,
-            "display_text": {
-                "generated_at": utc_now_iso(),
-                "prompt_version": settings.prompt_version,
-                "campaign": settings.campaign,
-                "tone": settings.tone,
-                "length": settings.length,
-                "temperature": settings.temperature,
-                "max_tokens": settings.max_tokens,
-                "backend": {"name": backend.config.name, "model": res.model},
-                "usage": (
-                    {
-                        "prompt_tokens": res.usage.prompt_tokens,
-                        "completion_tokens": res.usage.completion_tokens,
-                        "total_tokens": res.usage.total_tokens,
-                    }
-                    if backend.config.return_usage
-                    else None
-                ),
-            },
-        }
-
-        out.append(r)
-
-    return out
+    return [r for r in out if r is not None]

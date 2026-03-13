@@ -24,7 +24,7 @@ personas:
     use_nonce: true
     batch_size: 10
     max_retries: 2
-    max_workers: 2
+    max_workers: 8
     require_json_only: true
 
 products:
@@ -40,7 +40,7 @@ products:
     use_nonce: true
     batch_size: 5
     max_retries: 2
-    max_workers: 2
+    max_workers: 8
     require_json_only: true
 
 # Optional: whether to run text enrichment immediately after spec generation.

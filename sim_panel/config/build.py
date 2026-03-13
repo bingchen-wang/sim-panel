@@ -254,6 +254,7 @@ def _maybe_enrich_personas(
         temperature=float(settings_raw.get("temperature", 0.2)),
         max_tokens=settings_raw.get("max_tokens"),
         metadata=settings_raw.get("metadata"),
+        max_workers=max(1, int(settings_raw.get("max_workers", 1))),
     )
 
     updated = ensure_persona_text(
@@ -303,6 +304,7 @@ def _maybe_enrich_products(
         campaign=settings_raw.get("campaign"),
         tone=str(settings_raw.get("tone", "neutral")),
         length=str(settings_raw.get("length", "short")),
+        max_workers=max(1, int(settings_raw.get("max_workers", 1))),
     )
 
     updated = ensure_display_text(
