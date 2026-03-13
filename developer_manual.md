@@ -1,5 +1,9 @@
 # Developer Manual
 
+<p align="center">
+  <img src="assets/logo2.svg" alt="sim-panel logo" width="300"/>
+</p>
+
 This companion manual documents the architecture of `sim-panel` for developers. It explains the functions, interfaces, and design boundaries of each module, and shows how the main components fit together into the end-to-end generation pipeline.
 
 ## Table of Contents
@@ -932,3 +936,571 @@ CLI will typically override or construct run directories and pass them to `io/` 
 - llm outcomes require backend
 
 This avoids deferred runtime failures during generation.
+
+## Analysis overview
+
+`sim_panel/analysis/` provides a config-driven post-processing layer for generated runs. Its job is to load one run from `outputs/`, interpret it through the run metadata, compute selected summaries and metrics, and write a reproducible analysis bundle to disk.
+
+The analysis layer is designed around a **single-run-first** philosophy. The native unit of analysis is one run directory, typically containing `events.jsonl`, `metadata.json`, and companion output files. Multi-run comparison is treated as a later layer built on top of standardized single-run summaries, rather than as the core abstraction from the outset.
+
+### Design principles
+
+- **One run is the native analysis unit.**  
+  A run is the combination of generated event outputs under `outputs/<run_name>/` plus metadata-traced provenance to the original persona/product source files.
+
+- **Analysis is YAML-governed.**  
+  Like generation, analysis is controlled through a YAML file. The YAML specifies which run to analyze, where to write the analysis artifacts, whether to resolve linked source files, and which summaries/metrics to compute.
+
+- **Metadata is the source of provenance.**  
+  The analysis layer relies primarily on `metadata.json` rather than file naming conventions. In particular, `metadata.json` stores the run configuration snapshot and the paths needed to trace back to persona and product source files.
+
+- **Linked source files are optional enrichments.**  
+  Many summaries and metrics can be computed directly from `events.jsonl`, since evaluation rows already carry panelist features and product features. Source resolution is still supported so that later analyses can use richer upstream information when needed.
+
+- **Summaries and metrics are separate responsibilities.**  
+  `tables.py` produces human-readable structured summaries; `metrics/` computes reusable analytic diagnostics. This separation keeps the analysis layer modular and easier to extend.
+
+### Current module structure
+
+```text
+sim_panel/
+  analysis/
+    __init__.py
+    types.py
+    config.py
+    metadata.py
+    resolve.py
+    run.py
+    runner.py
+    tables.py
+    metrics/
+      __init__.py
+      utils.py
+      quality.py
+      diversity.py
+      persona.py
+      selection.py
+```
+
+### Main files
+
+#### `types.py`
+Defines the core analysis dataclasses:
+
+- `AnalysisConfig`: normalized analysis configuration extracted from YAML
+- `RunAnalysis`: in-memory representation of one analyzed run, including:
+  - all event rows
+  - selection rows
+  - evaluation rows
+  - raw metadata
+  - flattened metadata summary
+  - optional linked persona/product source records
+  - computed analysis artifacts
+
+#### `config.py`
+Parses a YAML config into an `AnalysisConfig`, following the same style as the generation/config layer. The YAML currently supports:
+
+- `run_dir`
+- `output_dir`
+- `load`
+- `summaries`
+- `metrics`
+- `plots`
+- `export`
+
+This module is responsible only for validation and normalization of analysis config, not for executing the analysis.
+
+#### `metadata.py`
+Flattens nested `metadata.json` into a compact analysis-facing record. This makes later comparison and reporting easier by exposing stable top-level keys such as:
+
+- run name
+- schema version
+- policy
+- seed
+- backend name/model
+- outcome model temperature
+- counts
+- config path
+- personas/products source paths
+
+It also exposes questionnaire field declarations for outcomes and traces.
+
+#### `resolve.py`
+Resolves linked source files from metadata. In particular, it traces persona and product sources from:
+
+- `extra.personas_path` / `extra.products_path`
+- or fallback paths inside `config_snapshot.panelists.source` / `config_snapshot.products.source`
+
+This module makes source loading optional and robust to missing files.
+
+#### `run.py`
+Implements the single-run loading and orchestration logic. It:
+
+1. loads `events.jsonl`
+2. loads `metadata.json`
+3. flattens metadata
+4. splits events into `selection` and `evaluation` rows
+5. optionally resolves linked persona/product source files
+6. computes the requested summaries and metrics
+
+This is the main internal entry point for single-run analysis.
+
+#### `runner.py`
+Provides the top-level `run_analysis(...)` entry point. At present, it delegates to the single-run analysis pipeline. Over time, this file can grow to coordinate exports, plots, and richer analysis workflows.
+
+#### `tables.py`
+Builds summary records for one run. Current summaries include:
+
+- **run summary**
+  - row counts
+  - event type counts
+  - policy/schema/seed/backend info
+  - observed panelist/product/period counts
+  - provenance paths
+
+- **outcome summary**
+  - declared questionnaire outcome fields
+  - observed counts
+  - missingness by field
+  - lightweight numeric/categorical summaries
+
+- **trace summary**
+  - declared questionnaire trace fields
+  - observed counts
+  - missingness by field
+  - text-length summaries where applicable
+
+- **selection summary**
+  - average choice-set size
+  - average requested/executed/dropped sizes
+  - empty-selection rates
+  - top requested and executed products
+
+### Metrics overview
+
+The `metrics/` submodule contains reusable analytic diagnostics, separate from descriptive summary tables.
+
+#### `metrics/utils.py`
+Shared helpers for metric computation, including:
+
+- safe means/variances
+- entropy computation
+- observed-support and full-support normalized entropy
+- support size
+- value counts
+- grouped extraction of numeric outcomes
+
+For entropy-based metrics, the design distinguishes between:
+
+- **full-support normalized entropy**: normalized by the full allowed support of the questionnaire or product universe
+- **observed-support normalized entropy**: normalized by the categories actually observed in the run
+
+Both are retained because they answer different questions.
+
+#### `metrics/quality.py`
+Operational and completeness diagnostics for one run. Current responsibilities include:
+
+- event / selection / evaluation row counts
+- rate of non-empty outcomes
+- rate of non-empty traces
+- panelist-feature and product-feature coverage
+- selection linkage rate
+- missingness rates by declared outcome field
+- missingness rates by declared trace field
+
+This file answers the question: **did the run execute cleanly enough to trust downstream analysis?**
+
+#### `metrics/diversity.py`
+Field-level diversity diagnostics for declared outcome fields. Current metrics include:
+
+- raw entropy
+- full-support normalized entropy
+- observed-support normalized entropy
+- observed support size
+- allowed support size
+- numeric mean/variance where applicable
+- value counts
+
+This file answers the question: **how much variation is present in the realized outputs?**
+
+#### `metrics/persona.py`
+Panelist/product differentiation diagnostics for numeric outcome fields (currently designed around fields such as `rating`). Current metrics include:
+
+- `panelist_mean_variance`
+- `product_mean_variance`
+- `mean_within_product_panelist_variance`
+- `mean_within_panelist_product_variance`
+- `mean_pairwise_panelist_distance`
+- `mean_pairwise_product_distance`
+
+These metrics provide a symmetric view of behavioral differentiation along both axes of the evaluation matrix:
+
+- do panelists disagree on the same product?
+- does a given panelist distinguish among products?
+- are panelist preference profiles distinct?
+- are product response profiles distinct across panelists?
+
+#### `metrics/selection.py`
+Selection-behavior diagnostics for `selection` rows, especially under `self_selection`. Current metrics include:
+
+- average choice-set size
+- average requested/executed/dropped sizes
+- empty request/execution rates
+- request-to-execution ratio
+- drop rate over requested selections
+- requested-product entropy
+- executed-product entropy
+- both full-support and observed-support normalized entropy
+- number of unique requested and executed products
+
+This file treats self-selection as a first-class behavioral object, rather than a side effect of evaluation.
+
+### Typical analysis flow
+
+At a high level, the intended workflow is:
+
+1. load analysis YAML
+2. load one run from `outputs/<run_name>/`
+3. flatten and inspect metadata
+4. optionally resolve linked source files
+5. split events into selection/evaluation rows
+6. compute requested summaries
+7. compute requested metrics
+8. save artifacts to the requested analysis output directory
+
+### Example YAML shape
+
+```yaml
+run_dir: outputs/run_beer_demo_large_self_selection
+output_dir: outputs/run_beer_demo_large_self_selection/analysis
+
+load:
+  resolve_sources: true
+  prefer_extra_paths: true
+  strict_source_resolution: false
+
+summaries:
+  run: true
+  outcomes: true
+  traces: true
+  selections: true
+
+metrics:
+  quality: true
+  diversity: true
+  persona: true
+  selection: true
+
+plots:
+  outcome_distributions: true
+  persona_diagnostics: false
+
+export:
+  csv: true
+  json: true
+  markdown: true
+  overwrite: true
+```
+
+### Plot generation
+
+`sim_panel/analysis/plots.py` provides the plotting layer for single-run analysis. It is responsible for turning computed event outcomes and selection behavior into saved visual artifacts under the analysis output directory.
+
+The plotting layer is intentionally kept separate from summaries and metrics:
+
+- `tables.py` builds structured descriptive summaries
+- `metrics/` computes reusable analytic diagnostics
+- `plots.py` renders selected visual views of those results
+
+This separation makes it easier to iterate on visual outputs without entangling plotting logic with metric computation.
+
+### Design principles
+
+- **Plots are generated from one run at a time.**  
+  As with the rest of the analysis layer, plotting is currently single-run-first.
+
+- **Plot families are YAML-configurable.**  
+  The analysis YAML specifies which plot families to enable and provides a small set of stable display options.
+
+- **Saved image files are the primary artifact.**  
+  Plot functions save `.png` files directly under `analysis/plots/`. The runner also writes a `plot_index.json` file when JSON export is enabled.
+
+- **The plot API is split into a stable entry point plus lower-level functions.**  
+  `generate_plots(...)` is the production entry point used by `run.py`, while the individual `plot_*` functions can be imported directly for experimentation or future notebook-style workflows.
+
+### Current plot families
+
+The current implementation supports four plot families.
+
+#### Outcome distributions
+These plots visualize the empirical distribution of declared outcome fields from evaluation rows.
+
+Supported outcome types:
+- numeric / ordinal (`int`, `float`)
+- categorical
+
+Current options include:
+- plotting counts or shares
+- restricting plots to a subset of declared outcome fields
+- controlling figure size
+
+Typical output files include:
+
+- `outcome_distribution_rating_count.png`
+- `outcome_distribution_purchase_intent_count.png`
+
+#### Panelist summary plots
+These plots summarize one numeric outcome field by `panelist_id`.
+
+Current supported summary metrics:
+- `mean`
+- `variance`
+
+They are useful for checking whether panelists differ in their overall level or dispersion of responses.
+
+Typical output files include:
+
+- `panelist_mean_rating.png`
+- `panelist_variance_rating.png`
+
+#### Product summary plots
+These plots summarize one numeric outcome field by `product_id`.
+
+Current supported summary metrics:
+- `mean`
+- `variance`
+
+They are useful for checking whether products differ in their average appeal or in the spread of responses they elicit.
+
+Typical output files include:
+
+- `product_mean_rating.png`
+- `product_variance_rating.png`
+
+#### Selection concentration plots
+These plots visualize how selection mass is distributed across products in `selection` rows.
+
+Current supported modes:
+- `executed`
+- `requested`
+
+They are especially relevant for `self_selection` runs, where one wants to inspect whether choices are concentrated on a narrow subset of products or spread more broadly.
+
+Typical output files include:
+
+- `selection_concentration_executed.png`
+- `selection_concentration_requested.png`
+
+### Current module structure
+
+The plotting layer is currently centered on:
+
+- `generate_plots(...)`
+- `plot_outcome_distributions(...)`
+- `plot_panelist_summary(...)`
+- `plot_product_summary(...)`
+- `plot_selection_concentration(...)`
+
+Helper functions inside `plots.py` handle:
+- value-count bar charts
+- labeled summary bar charts
+- grouping evaluation outcomes by panelist or product
+- counting requested/executed product selections
+
+### Plot YAML configuration
+
+Plot generation is controlled through a nested `plots:` section in the analysis YAML. The current supported shape is:
+
+```yaml
+plots:
+  outcome_distributions:
+    enabled: true
+    normalize_to_share: false
+    fields: null
+    figsize: [7, 4.5]
+
+  panelist_summary:
+    enabled: true
+    outcome_field: rating
+    metrics: [mean, variance]
+    max_items: 30
+    sort_by: label_asc
+    horizontal: false
+
+  product_summary:
+    enabled: true
+    outcome_field: rating
+    metrics: [mean, variance]
+    max_items: 30
+    sort_by: label_asc
+    horizontal: false
+
+  selection_concentration:
+    enabled: true
+    modes: [executed, requested]
+    top_k: 15
+    horizontal: true
+```
+
+### Meaning of the current options
+
+#### `outcome_distributions`
+- `enabled`: whether to generate distribution plots
+- `normalize_to_share`: if `true`, plot shares instead of counts
+- `fields`: optional subset of declared outcome fields; `null` means plot all declared fields
+- `figsize`: size of each plot in inches
+
+#### `panelist_summary`
+- `enabled`: whether to generate panelist summary plots
+- `outcome_field`: numeric outcome field to summarize, typically `rating`
+- `metrics`: one or more of `mean`, `variance`
+- `max_items`: truncate to the first `max_items` after sorting
+- `sort_by`: one of
+  - `label_asc`
+  - `label_desc`
+  - `value_asc`
+  - `value_desc`
+- `horizontal`: whether to use a horizontal bar chart
+
+#### `product_summary`
+Same options as `panelist_summary`, but grouped by `product_id`.
+
+#### `selection_concentration`
+- `enabled`: whether to generate selection concentration plots
+- `modes`: one or both of `executed`, `requested`
+- `top_k`: show only the top `k` products by count
+- `horizontal`: whether to use a horizontal bar chart
+
+### Current artifact behavior
+
+Plot images are always written under:
+
+```text
+<analysis_output_dir>/plots/
+```
+
+When JSON export is enabled, the analysis runner also writes:
+
+```text
+plots/plot_index.json
+```
+
+This file maps plot artifact names to the saved image paths, making it easier for downstream tooling or reports to reference generated images.
+
+### Current limitations
+
+The current plotting layer is intentionally modest. It focuses on stable, inspectable single-run diagnostics rather than polished presentation graphics.
+
+Not yet implemented:
+
+- multi-run comparison plots
+- embedded plots in markdown or HTML reports
+- richer diagnostic figures such as heatmaps or scatter comparisons
+- regression-diagnostic plots for attribute usefulness / consistency
+- custom styling beyond the current small set of display options
+
+The intended development path is to keep the current plot families stable first, then add richer visual diagnostics only after the summary and metric contracts have settled.
+
+### Artifact writing and report generation
+
+The analysis runner now writes artifacts to a structured output directory under the configured `output_dir`. The current layout is:
+
+```text
+<analysis_output_dir>/
+  summary/
+  metrics/
+  plots/
+  report/
+```
+
+#### `summary/`
+Holds structured single-run summaries such as:
+
+- `run_summary`
+- `outcome_summary`
+- `trace_summary`
+- `selection_summary`
+
+Depending on export settings, these are written as JSON and/or CSV.
+
+#### `metrics/`
+Holds machine-readable metric artifacts such as:
+
+- `quality_metrics`
+- `diversity_metrics`
+- `persona_metrics`
+- `selection_metrics`
+
+Depending on export settings, these are written as JSON and/or CSV.
+
+#### `plots/`
+Holds saved plot images generated by `plots.py`. When JSON export is enabled, the runner also writes a `plot_index.json` file mapping plot artifact names to saved paths.
+
+#### `report/`
+Holds lightweight human-readable report artifacts. The current implementation writes:
+
+- `report.md`
+
+This markdown report is intentionally minimal. Its purpose is to give a concise overview of the run, surface the main summary and metric values, and point the reader to the saved JSON/CSV/plot artifacts. It is not intended to replace the machine-readable outputs.
+
+### Export controls
+
+Artifact writing is governed by `export:` in the analysis YAML:
+
+```yaml
+export:
+  csv: true
+  json: true
+  markdown: true
+  overwrite: true
+```
+
+Current behavior:
+
+- `json: true` enables JSON output for summaries, metrics, and `plots/plot_index.json`
+- `csv: true` enables CSV output for summaries and selected metrics that can be flattened into row-oriented tables
+- `markdown: true` enables `report/report.md`
+- `overwrite: true` allows existing artifact files to be replaced
+
+### Current scope of markdown reporting
+
+The current markdown report includes:
+
+- run overview
+- selected quality metrics
+- selected panelist/product differentiation metrics
+- selected selection metrics
+- a list of generated plot artifacts
+
+This report is intentionally lightweight. Richer report generation (e.g. more detailed narrative sections, embedded tables, or HTML output) is deferred until the summary/metric contracts stabilize further.
+
+
+### Current scope and limitations
+
+At present, the analysis layer supports:
+
+- single-run loading
+- metadata-driven provenance resolution
+- structured summary generation
+- core metrics for quality, diversity, panelist/product differentiation, and selection behavior
+- `plots.py` for visual outputs
+- markdown report generation
+
+The following components are planned but not yet implemented:
+
+- multi-run comparison layer
+- regression-based attribute diagnostics for consistency and feature usefulness
+- benchmark-style comparison against real observed data
+
+These later components should build on the current single-run summary/metric contracts rather than bypassing them.
+
+### Planned extension: regression-based diagnostics
+
+A natural future extension is an analysis module for regression-based diagnostics, likely via a separate file such as `analysis/regression.py`. Its role would be to move beyond descriptive variation metrics and ask questions such as:
+
+- do declared panelist attributes actually predict realized outcomes?
+- do product attributes explain structured variation in ratings?
+- are generated personas behaviorally consistent with their stated attributes?
+- does a given prompting or generation setup increase the usefulness of attributes?
+
+This is intentionally deferred for now so that the core summary/metric layer can stabilize first.

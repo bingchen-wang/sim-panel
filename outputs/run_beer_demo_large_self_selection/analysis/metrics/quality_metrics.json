@@ -1,0 +1,18 @@
+{
+  "n_evaluation_rows": 60,
+  "n_events": 80,
+  "n_selection_rows": 20,
+  "outcome_field_missing_rates": {
+    "bitterness": 0.0,
+    "purchase_intent": 0.0,
+    "rating": 0.0
+  },
+  "panelist_feature_coverage_rate": 1.0,
+  "product_feature_coverage_rate": 1.0,
+  "rows_with_any_outcome_rate": 1.0,
+  "rows_with_any_trace_rate": 1.0,
+  "selection_link_rate": 1.0,
+  "trace_field_missing_rates": {
+    "rationale": 0.25
+  }
+}

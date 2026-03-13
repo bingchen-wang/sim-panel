@@ -1,0 +1,54 @@
+run_dir: outputs/run_beer_demo_large_self_selection
+output_dir: outputs/run_beer_demo_large_self_selection/analysis
+
+load:
+  resolve_sources: true
+  prefer_extra_paths: true
+  strict_source_resolution: false
+
+summaries:
+  run: true
+  outcomes: true
+  traces: true
+  selections: true
+
+metrics:
+  quality: true
+  diversity: true
+  persona: true
+  selection: true
+
+plots:
+  outcome_distributions:
+    enabled: true
+    normalize_to_share: false
+    fields: null
+    figsize: [7, 4.5]
+
+  panelist_summary:
+    enabled: true
+    outcome_field: rating
+    metrics: [mean, variance]
+    max_items: 30
+    sort_by: label_asc
+    horizontal: false
+
+  product_summary:
+    enabled: true
+    outcome_field: rating
+    metrics: [mean, variance]
+    max_items: 30
+    sort_by: label_asc
+    horizontal: false
+
+  selection_concentration:
+    enabled: true
+    modes: [executed, requested]
+    top_k: 15
+    horizontal: true
+
+export:
+  csv: true
+  json: true
+  markdown: true
+  overwrite: true

@@ -1,0 +1,89 @@
+{
+  "avg_choice_set_size": 10.0,
+  "avg_dropped_size": 1.25,
+  "avg_executed_size": 3.0,
+  "avg_requested_size": 4.25,
+  "empty_execution_rate": 0.0,
+  "empty_request_rate": 0.0,
+  "n_selection_rows": 20,
+  "top_executed_products": [
+    [
+      "prod_0006",
+      13
+    ],
+    [
+      "prod_0001",
+      10
+    ],
+    [
+      "prod_0002",
+      10
+    ],
+    [
+      "prod_0003",
+      9
+    ],
+    [
+      "prod_0009",
+      8
+    ],
+    [
+      "prod_0005",
+      6
+    ],
+    [
+      "prod_0004",
+      2
+    ],
+    [
+      "prod_0010",
+      1
+    ],
+    [
+      "prod_0007",
+      1
+    ]
+  ],
+  "top_requested_products": [
+    [
+      "prod_0006",
+      16
+    ],
+    [
+      "prod_0009",
+      14
+    ],
+    [
+      "prod_0001",
+      11
+    ],
+    [
+      "prod_0010",
+      11
+    ],
+    [
+      "prod_0002",
+      10
+    ],
+    [
+      "prod_0003",
+      9
+    ],
+    [
+      "prod_0005",
+      8
+    ],
+    [
+      "prod_0007",
+      3
+    ],
+    [
+      "prod_0004",
+      2
+    ],
+    [
+      "prod_0008",
+      1
+    ]
+  ]
+}

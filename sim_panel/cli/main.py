@@ -25,6 +25,12 @@ from sim_panel.schema.validate import (
 from sim_panel.config.yaml_loader import load_yaml
 from sim_panel.data_gen.run import run_datagen_from_yaml
 
+from sim_panel.analysis import (
+    build_analysis_config_from_yaml,
+    run_analysis,
+)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -37,6 +43,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return _cmd_validate(args)
     if args.command == "sample":
         return _cmd_sample(args)
+    if args.command == "analyze":
+        return _cmd_analyze(args)
 
     parser.print_help()
     return 2
@@ -95,7 +103,12 @@ def _build_parser() -> argparse.ArgumentParser:
     s.add_argument("--n", type=int, default=10, help="Number of rows to sample")
     s.add_argument("--seed", type=int, default=0, help="RNG seed for sampling")
 
+    # analyze
+    a = sub.add_parser("analyze", help="Analyze a generated run from an analysis YAML config")
+    a.add_argument("--config", required=True, help="Path to analysis YAML config")
+
     return p
+
 
 def _cmd_make_data(args: argparse.Namespace) -> int:
     # Load YAML so we can print output paths (and fail early if invalid)
@@ -134,6 +147,7 @@ def _cmd_make_data(args: argparse.Namespace) -> int:
             print(f"Wrote (enriched products): {pd_save}")
 
     return 0
+
 
 def _cmd_generate(args: argparse.Namespace) -> int:
     bundle = build_run_from_yaml(args.config)
@@ -276,6 +290,27 @@ def _cmd_sample(args: argparse.Namespace) -> int:
     print(json.dumps(sample, ensure_ascii=False, indent=2))
     return 0
 
+
+def _cmd_analyze(args: argparse.Namespace) -> int:
+    cfg = build_analysis_config_from_yaml(args.config)
+    run = run_analysis(cfg)
+
+    print(f"Analysis written to: {run.output_dir}")
+
+    if "run_summary" in run.artifacts:
+        rs = run.artifacts["run_summary"]
+        if isinstance(rs, dict):
+            n_events = rs.get("n_events")
+            n_eval = rs.get("n_evaluation_rows")
+            n_sel = rs.get("n_selection_rows")
+            print(f"Run summary: n_events={n_events}, n_evaluation_rows={n_eval}, n_selection_rows={n_sel}")
+
+    if "plots" in run.artifacts and isinstance(run.artifacts["plots"], dict):
+        print(f"Plots generated: {len(run.artifacts['plots'])}")
+
+    return 0
+
+
 def _resolve_save_preview(source_path: Any, save: Any) -> Optional[str]:
     if not isinstance(source_path, str):
         return None
@@ -287,6 +322,7 @@ def _resolve_save_preview(source_path: Any, save: Any) -> Optional[str]:
         p = save.get("path")
         return p if isinstance(p, str) else None
     return None
+
 
 def _default_output_dir() -> str:
     # Keep it simple; CLI can override. (We can add timestamped runs later.)
@@ -305,6 +341,7 @@ def _to_jsonable(obj: Any) -> Any:
     if isinstance(obj, (list, tuple)):
         return [_to_jsonable(x) for x in obj]
     return repr(obj)
+
 
 def _has_tqdm() -> bool:
     try:
