@@ -11,6 +11,7 @@ def render_evaluation_prompt(
     ctx: EvaluationContext,
     questionnaire: QuestionnaireSpec,
     include_features: bool = True,
+    prompting_strategy: str = "persona",
 ) -> str:
     """
     Render an evaluation "questionnaire" prompt for the panelist.
@@ -22,7 +23,22 @@ def render_evaluation_prompt(
     """
     lines: list[str] = []
 
-    lines.append("You are evaluating a product. Read the product information and answer the questionnaire.")
+    if prompting_strategy == "persona_cot":
+        lines.append("You are evaluating a product. Think step by step:")
+        lines.append("1. Consider your personal preferences and background.")
+        lines.append("2. Read the product information carefully.")
+        lines.append("3. Form your opinion based on how this product fits your needs.")
+        lines.append("4. Answer the questionnaire with your reasoning.")
+    elif prompting_strategy == "few_shot":
+        lines.append("You are evaluating a product. Read the product information and answer the questionnaire.")
+        lines.append("")
+        lines.append("## Example Evaluation")
+        lines.append("For a product like 'Classic Lager - A traditional pale lager with crisp finish',")
+        lines.append("a respondent might answer:")
+        ex = {"outcomes": {"rating": 7, "purchase_intent": "maybe"}, "traces": {"rationale": "Solid traditional beer, nothing exceptional but reliable."}}
+        lines.append(_pretty_json(ex))
+    else:
+        lines.append("You are evaluating a product. Read the product information and answer the questionnaire.")
     lines.append("")
     lines.append("## Product")
     lines.append(f"Product ID: {ctx.product_id}")
@@ -58,9 +74,11 @@ def render_evaluation_prompt(
     lines.append("## Output Format (STRICT)")
     lines.append("Return JSON only. No extra text. Use exactly these top-level keys: outcomes, traces.")
     lines.append("All field names must match the questionnaire keys exactly.")
+    if prompting_strategy == "persona_cot":
+        lines.append("Include a 'reasoning' field in traces with your step-by-step thinking.")
     lines.append("")
     lines.append("Example:")
-    example = _example_json(questionnaire)
+    example = _example_json(questionnaire, include_reasoning=(prompting_strategy == "persona_cot"))
     lines.append(example)
 
     return "\n".join(lines).strip() + "\n"
@@ -80,7 +98,7 @@ def _render_field(fs: FieldSpec) -> list[str]:
     return parts
 
 
-def _example_json(q: QuestionnaireSpec) -> str:
+def _example_json(q: QuestionnaireSpec, include_reasoning: bool = False) -> str:
     outcomes: Dict[str, Any] = {}
     for fs in q.outcome_fields:
         outcomes[fs.name] = _example_value(fs)
@@ -88,6 +106,8 @@ def _example_json(q: QuestionnaireSpec) -> str:
     traces: Dict[str, Any] = {}
     for fs in q.trace_fields:
         traces[fs.name] = _example_value(fs)
+    if include_reasoning:
+        traces["reasoning"] = "Step 1: ... Step 2: ... Step 3: ..."
 
     payload = {"outcomes": outcomes, "traces": traces}
     return _pretty_json(payload)

@@ -215,12 +215,19 @@ class EventGenerator:
                 t=t,
                 products_shown=products_shown,
             )
-            sel_prompt = render_selection_prompt(ctx=sel_ctx, cfg=self.cfg.selection)
+            strategy = self.cfg.prompting_strategy
+            sel_prompt = render_selection_prompt(ctx=sel_ctx, cfg=self.cfg.selection, prompting_strategy=strategy)
+
+            # For zero_shot / few_shot, override system prompt to remove persona
+            sel_system_prompt = None
+            if strategy in ("zero_shot", "few_shot"):
+                sel_system_prompt = "You are evaluating consumer products. Provide honest, thoughtful responses."
 
             raw_sel = panelist.select(
                 task_prompt=sel_prompt,
                 choice_set=choice_set,
                 metadata={"module": "generators.selection", "policy": self.cfg.policy.name, "t": t},
+                system_prompt=sel_system_prompt,
             )
 
             parsed_sel = parse_selection_response(
@@ -369,7 +376,7 @@ class EventGenerator:
                 panelist_features=panelist_features,
                 product_features=product_features,
             )
-            res = outcome_model.evaluate(panelist=panelist, ctx=ctx)
+            res = outcome_model.evaluate(panelist=panelist, ctx=ctx, prompting_strategy=self.cfg.prompting_strategy)
             outcomes = res.outcomes
             traces = res.traces
             if res.errors:

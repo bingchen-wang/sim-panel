@@ -90,6 +90,7 @@ def _run_enrich_after(
         temperature=float(p_settings_raw.get("temperature", 0.2)),
         max_tokens=p_settings_raw.get("max_tokens"),
         metadata=p_settings_raw.get("metadata"),
+        max_workers=max(1, int(p_settings_raw.get("max_workers", 1))),
     )
 
     personas2 = ensure_persona_text(
@@ -117,6 +118,7 @@ def _run_enrich_after(
         campaign=prod_settings_raw.get("campaign"),
         tone=str(prod_settings_raw.get("tone", "neutral")),
         length=str(prod_settings_raw.get("length", "short")),
+        max_workers=max(1, int(prod_settings_raw.get("max_workers", 1))),
     )
 
     products2 = ensure_display_text(

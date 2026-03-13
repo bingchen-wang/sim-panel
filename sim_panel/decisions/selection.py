@@ -15,6 +15,7 @@ def render_selection_prompt(
     *,
     ctx: SelectionContext,
     cfg: SelectionConfig,
+    prompting_strategy: str = "persona",
 ) -> str:
     """
     Render a selection prompt for the panelist.
@@ -26,8 +27,14 @@ def render_selection_prompt(
     unless allow_empty=False (in which case we ask them to pick at least one).
     """
     lines: List[str] = []
-    lines.append("You are choosing which products you want to evaluate.")
-    lines.append("Read the product list and select the items you want to evaluate next.")
+
+    if prompting_strategy == "persona_cot":
+        lines.append("You are choosing which products you want to evaluate.")
+        lines.append("Think step by step about which products align with your preferences and interests.")
+        lines.append("First, consider what matters to you. Then review each product. Finally, make your selection.")
+    else:
+        lines.append("You are choosing which products you want to evaluate.")
+        lines.append("Read the product list and select the items you want to evaluate next.")
     lines.append("")
 
     lines.append("## Products Shown")
@@ -43,6 +50,13 @@ def render_selection_prompt(
             if cfg.include_features and isinstance(p.get("product_features"), dict):
                 lines.append(f"   product_features: {_compact_json(p['product_features'])}")
             lines.append("")
+
+    if prompting_strategy == "few_shot":
+        lines.append("## Example Selection")
+        lines.append("Given products about craft beverages, a respondent might select:")
+        ex = {"selected_product_ids": ["prod001", "prod003"], "traces": {"reasoning": "Selected based on personal taste preferences."}}
+        lines.append(_pretty_json(ex))
+        lines.append("")
 
     lines.append("## Instructions")
     if cfg.allow_empty:
@@ -60,13 +74,22 @@ def render_selection_prompt(
     lines.append("## Output Format (STRICT)")
     lines.append("Return JSON with the following keys:")
     lines.append("- selected_product_ids: a list of product_id strings (may be empty if allowed)")
-    lines.append("- traces: an optional object with any brief notes (optional)")
+    if prompting_strategy == "persona_cot":
+        lines.append("- traces: an object with a 'reasoning' field containing your step-by-step thinking")
+    else:
+        lines.append("- traces: an optional object with any brief notes (optional)")
     lines.append("")
     lines.append("Example:")
-    example = {
-        "selected_product_ids": [ctx.products_shown[0]["product_id"]] if ctx.products_shown else [],
-        "traces": {"notes": "Optional brief note"},
-    }
+    if prompting_strategy == "persona_cot":
+        example = {
+            "selected_product_ids": [ctx.products_shown[0]["product_id"]] if ctx.products_shown else [],
+            "traces": {"reasoning": "Step 1: I prefer... Step 2: Product X matches because... Step 3: Selected."},
+        }
+    else:
+        example = {
+            "selected_product_ids": [ctx.products_shown[0]["product_id"]] if ctx.products_shown else [],
+            "traces": {"notes": "Optional brief note"},
+        }
     lines.append(_pretty_json(example))
 
     return "\n".join(lines).strip() + "\n"

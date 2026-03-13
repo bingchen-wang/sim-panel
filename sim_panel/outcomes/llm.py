@@ -19,8 +19,16 @@ class LLMOutcomeModel:
     def __init__(self, cfg: OutcomeConfig) -> None:
         self.cfg = cfg
 
-    def evaluate(self, *, panelist, ctx: EvaluationContext) -> OutcomeResult:
-        prompt = render_evaluation_prompt(ctx=ctx, questionnaire=self.cfg.questionnaire, include_features=True)
+    def evaluate(self, *, panelist, ctx: EvaluationContext, prompting_strategy: str = "persona") -> OutcomeResult:
+        prompt = render_evaluation_prompt(
+            ctx=ctx, questionnaire=self.cfg.questionnaire,
+            include_features=True, prompting_strategy=prompting_strategy,
+        )
+
+        # Determine system prompt based on strategy
+        system_prompt = None  # default: use panelist.persona_text
+        if prompting_strategy in ("zero_shot", "few_shot"):
+            system_prompt = "You are evaluating consumer products. Provide honest, thoughtful responses."
 
         # Panelist is responsible for backend calls (separate from policies/outcomes).
         raw = panelist.evaluate(
@@ -28,6 +36,7 @@ class LLMOutcomeModel:
             temperature=self.cfg.temperature,
             max_tokens=self.cfg.max_tokens,
             metadata={"module": "outcomes.llm", "panelist_id": ctx.panelist_id, "product_id": ctx.product_id, "t": ctx.t},
+            system_prompt=system_prompt,
         )
 
         obj, err = extract_json_object(raw)

@@ -56,5 +56,8 @@ class GeneratorConfig:
     # parallelism: number of concurrent decision workers (1 = sequential)
     max_workers: int = 1
 
+    # prompting strategy: zero_shot | few_shot | persona | persona_cot
+    prompting_strategy: str = "persona"
+
     # small metadata merged into each row
     row_meta: Dict[str, Any] = field(default_factory=dict)

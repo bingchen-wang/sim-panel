@@ -70,6 +70,7 @@ class Panelist:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         metadata: Optional[dict[str, Any]] = None,
+        system_prompt: Optional[str] = None,
     ) -> str:
         """
         Run a selection call. The generator/policy provides the choice_set (IDs),
@@ -89,8 +90,8 @@ class Panelist:
         t = self.select_settings.temperature if temperature is None else temperature
         mt = self.select_settings.max_tokens if max_tokens is None else max_tokens
 
-        return self._chat(task_prompt=task_prompt, temperature=t, max_tokens=mt, metadata=md, kind="select")
-    
+        return self._chat(task_prompt=task_prompt, temperature=t, max_tokens=mt, metadata=md, kind="select", system_prompt=system_prompt)
+
     def evaluate(
         self,
         *,
@@ -98,6 +99,7 @@ class Panelist:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         metadata: Optional[dict[str, Any]] = None,
+        system_prompt: Optional[str] = None,
     ) -> str:
         """
         Run an evaluation call (panelist evaluating a single product).
@@ -113,7 +115,7 @@ class Panelist:
         t = self.eval_settings.temperature if temperature is None else temperature
         mt = self.eval_settings.max_tokens if max_tokens is None else max_tokens
 
-        return self._chat(task_prompt=task_prompt, temperature=t, max_tokens=mt, metadata=md, kind="evaluate")
+        return self._chat(task_prompt=task_prompt, temperature=t, max_tokens=mt, metadata=md, kind="evaluate", system_prompt=system_prompt)
 
     def _chat(
         self,
@@ -123,12 +125,14 @@ class Panelist:
         max_tokens: Optional[int],
         metadata: Optional[dict[str, Any]],
         kind: str,
+        system_prompt: Optional[str] = None,
     ) -> str:
         if self.backend is None:
             raise RuntimeError("Panelist.backend is None; cannot run LLM calls.")
 
+        sys_content = system_prompt if system_prompt is not None else self.persona_text
         messages: List[Message] = [
-            {"role": "system", "content": self.persona_text},
+            {"role": "system", "content": sys_content},
             {"role": "user", "content": task_prompt},
         ]
         res = self.backend.chat(messages, temperature=temperature, max_tokens=max_tokens, metadata=metadata)

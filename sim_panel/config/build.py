@@ -73,6 +73,7 @@ def build_run_from_dict(d: Mapping[str, Any], *, config_path: Optional[str] = No
     max_errors = _get_int(gen_cfg_raw, "max_errors", default=50)
     event_namespace = _get_str(gen_cfg_raw, "event_namespace", default="sim_panel.v0")
     max_workers = _get_int(gen_cfg_raw, "max_workers", default=1)
+    prompting_strategy = _get_str(gen_cfg_raw, "prompting_strategy", default="persona") or "persona"
 
     # --- policy config (required) ---
     policy_cfg_raw = _require_mapping(d, "policy")
@@ -196,6 +197,7 @@ def build_run_from_dict(d: Mapping[str, Any], *, config_path: Optional[str] = No
         max_errors=max_errors,
         event_namespace=event_namespace,
         max_workers=max_workers,
+        prompting_strategy=prompting_strategy,
     )
 
     generator = EventGenerator(gen_cfg)

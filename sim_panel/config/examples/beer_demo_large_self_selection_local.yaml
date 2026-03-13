@@ -1,6 +1,6 @@
 # Example run config: beer demo + self_selection policy (LLM-based selection + evaluation)
 
-output_dir: outputs/run_beer_demo_large_self_selection
+output_dir: /home/bd58/data/bd58/sim-panel/run_beer_demo_large_self_selection
 
 backend:
   name: ollama

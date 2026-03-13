@@ -1,0 +1,69 @@
+# Phase 1 data generation: 200 personas x 50 products
+# Uses gemma3:12b for generation (not for evaluation — that uses condition-specific models)
+
+backend:
+  name: ollama
+  model: gemma3:12b
+  return_usage: true
+  params:
+    base_url: "http://localhost:11434"
+    timeout_s: 180
+
+output:
+  personas_path: /home/bd58/data/bd58/sim-panel/data/personas_phase1.jsonl
+  products_path: /home/bd58/data/bd58/sim-panel/data/products_phase1.jsonl
+
+personas:
+  n: 200
+  seed: 42
+  persona_text_variant: default
+  persona_id_prefix: p
+  llm:
+    prompt_version: v1
+    temperature: 0.7
+    max_tokens: 4096
+    use_nonce: true
+    batch_size: 10
+    max_retries: 3
+    max_workers: 8
+    require_json_only: true
+
+products:
+  kind: beer
+  n: 50
+  seed: 42
+  display_variant: default
+  product_id_prefix: prod
+  llm:
+    prompt_version: v1
+    temperature: 0.7
+    max_tokens: 4096
+    use_nonce: true
+    batch_size: 10
+    max_retries: 3
+    max_workers: 8
+    require_json_only: true
+
+enrich_after:
+  enabled: true
+  panelists:
+    overwrite: false
+    save: in_place
+    settings:
+      prompt_version: v1
+      temperature: 0.2
+      max_tokens: 600
+      max_workers: 16
+      metadata: {module: panelists.enrich}
+  products:
+    overwrite: false
+    save: in_place
+    settings:
+      prompt_version: v1
+      campaign: "beer-demo-phase1"
+      tone: neutral
+      length: short
+      temperature: 0.2
+      max_tokens: 320
+      max_workers: 16
+      metadata: {module: products.enrich}

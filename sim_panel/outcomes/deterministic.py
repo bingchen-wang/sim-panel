@@ -21,7 +21,7 @@ class DeterministicOutcomeModel:
     def __init__(self, cfg: OutcomeConfig) -> None:
         self.cfg = cfg
 
-    def evaluate(self, *, panelist, ctx: EvaluationContext) -> OutcomeResult:
+    def evaluate(self, *, panelist, ctx: EvaluationContext, prompting_strategy: str = "persona") -> OutcomeResult:
         q = self.cfg.questionnaire
         seed = f"{ctx.panelist_id}|{ctx.product_id}|{ctx.t}".encode("utf-8")
         h = hashlib.blake2b(seed, digest_size=8).hexdigest()
