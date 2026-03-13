@@ -99,6 +99,7 @@ def _llm_settings_from_dict(d: Mapping[str, Any]) -> LLMGenSettings:
         metadata=d.get("metadata"),
         batch_size=int(d.get("batch_size", 10)),
         max_retries=int(d.get("max_retries", 2)),
+        max_workers=max(1, int(d.get("max_workers", 1))),
         require_json_only=bool(d.get("require_json_only", True)),
         use_nonce=bool(d.get("use_nonce", False)),
     )

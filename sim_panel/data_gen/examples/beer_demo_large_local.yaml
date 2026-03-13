@@ -1,0 +1,68 @@
+# sim_panel/data_gen/examples/beer_demo.yaml
+
+backend:
+  name: ollama
+  model: gemma3:12b
+  return_usage: true
+  params:
+    base_url: "http://localhost:11434"
+    timeout_s: 120
+
+output:
+  personas_path: data/personas_beer_demo_large_local.jsonl
+  products_path: data/products_beer_demo_large_local.jsonl
+
+personas:
+  n: 20
+  seed: 101
+  persona_text_variant: default
+  persona_id_prefix: p
+  llm:
+    prompt_version: v1
+    temperature: 0.6
+    max_tokens: 4096
+    use_nonce: true
+    batch_size: 10
+    max_retries: 2
+    max_workers: 2
+    require_json_only: true
+
+products:
+  kind: beer
+  n: 10
+  seed: 101
+  display_variant: default
+  product_id_prefix: prod
+  llm:
+    prompt_version: v1
+    temperature: 0.6
+    max_tokens: 4096
+    use_nonce: true
+    batch_size: 5
+    max_retries: 2
+    max_workers: 2
+    require_json_only: true
+
+# Optional: whether to run text enrichment immediately after spec generation.
+# If enabled, uses your existing panelists/products enrich modules and saves in place or separately.
+enrich_after:
+  enabled: false
+  panelists:
+    overwrite: false
+    save: {path: data/personas.enriched.jsonl}
+    settings:
+      prompt_version: v1
+      temperature: 0.2
+      max_tokens: 600
+      metadata: {module: panelists.enrich}
+  products:
+    overwrite: false
+    save: {path: data/products.enriched.jsonl}
+    settings:
+      prompt_version: v1
+      campaign: "beer-demo"
+      tone: neutral
+      length: short
+      temperature: 0.2
+      max_tokens: 320
+      metadata: {module: products.enrich}

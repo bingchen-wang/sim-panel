@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+import concurrent.futures
+from typing import Any, Dict, List, Optional, Tuple
 
 from sim_panel.data_gen.nonce import make_nonce
 from sim_panel.utils.progress import tqdm_wrap
@@ -34,24 +35,67 @@ def generate_persona_records_llm(
         return []
 
     batch_size = max(1, settings.batch_size)
-    out: List[PersonaRecord] = []
-    cursor = 0
-    batch_idx = 0
+    batch_specs: List[Tuple[int, int, int, int]] = []
 
     total_batches = (n_personas + batch_size - 1) // batch_size
-    for _ in tqdm_wrap(range(total_batches), total=total_batches, desc="Generate personas", enabled=progress):
-        if cursor >= n_personas:
+    for batch_idx in range(total_batches):
+        start = batch_idx * batch_size
+        if start >= n_personas:
             break
-        k = min(batch_size, n_personas - cursor)
+        k = min(batch_size, n_personas - start)
         batch_seed = seed + batch_idx
-        payload = _call_personas_batch(
-            backend=backend,
-            n=k,
-            seed=batch_seed,
-            batch_idx=batch_idx,
-            base_seed=seed,
-            settings=settings,
-        )
+        batch_specs.append((batch_idx, start, k, batch_seed))
+
+    ordered_payloads: List[Optional[str]] = [None] * len(batch_specs)
+    use_parallel = settings.max_workers > 1 and len(batch_specs) > 1
+
+    if use_parallel:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=settings.max_workers) as pool:
+            future_to_meta = {
+                pool.submit(
+                    _call_personas_batch,
+                    backend=backend,
+                    n=k,
+                    seed=batch_seed,
+                    base_seed=seed,
+                    batch_idx=batch_idx,
+                    settings=settings,
+                ): (i, batch_idx)
+                for i, (batch_idx, start, k, batch_seed) in enumerate(batch_specs)
+            }
+
+            for future in tqdm_wrap(
+                concurrent.futures.as_completed(future_to_meta),
+                total=len(future_to_meta),
+                desc="Generate personas",
+                enabled=progress,
+            ):
+                i, batch_idx = future_to_meta[future]
+                try:
+                    ordered_payloads[i] = future.result()
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"Persona batch generation failed at batch_idx={batch_idx}"
+                    ) from exc
+    else:
+        for i, (batch_idx, start, k, batch_seed) in enumerate(
+            tqdm_wrap(batch_specs, total=len(batch_specs), desc="Generate personas", enabled=progress)
+        ):
+            ordered_payloads[i] = _call_personas_batch(
+                backend=backend,
+                n=k,
+                seed=batch_seed,
+                base_seed=seed,
+                batch_idx=batch_idx,
+                settings=settings,
+            )
+
+    out: List[PersonaRecord] = []
+    for i, (batch_idx, start, k, batch_seed) in enumerate(batch_specs):
+        payload = ordered_payloads[i]
+        if payload is None:
+            raise RuntimeError("Persona generation finished with a missing batch payload.")
+
         personas = _parse_personas_payload(payload, k_expected=k)
 
         for j, item in enumerate(personas):
@@ -59,7 +103,7 @@ def generate_persona_records_llm(
             if not isinstance(attrs, dict):
                 raise ValueError(f"Persona item missing attributes dict: {item!r}")
 
-            persona_id = f"{persona_id_prefix}{cursor + j + 1:04d}"
+            persona_id = f"{persona_id_prefix}{start + j + 1:04d}"
             rec = PersonaRecord(
                 persona_id=persona_id,
                 persona_text=None,
@@ -69,9 +113,6 @@ def generate_persona_records_llm(
             )
             rec.compute_keys()
             out.append(rec)
-
-        cursor += k
-        batch_idx += 1
 
     return out
 

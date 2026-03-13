@@ -20,6 +20,7 @@ class LLMGenSettings:
 
     batch_size: int = 10
     max_retries: int = 2
+    max_workers: int = 1
 
     # If True, we require the LLM output to be JSON-only. If False, we will attempt to extract JSON.
     require_json_only: bool = True

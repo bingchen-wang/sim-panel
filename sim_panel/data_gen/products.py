@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+import concurrent.futures
+from typing import Any, Dict, List, Optional, Tuple
 
 from sim_panel.data_gen.nonce import make_nonce
 from sim_panel.utils.progress import tqdm_wrap
@@ -34,24 +35,67 @@ def generate_beer_product_records_llm(
         return []
 
     batch_size = max(1, settings.batch_size)
-    out: List[ProductRecord] = []
-    cursor = 0
-    batch_idx = 0
+    batch_specs: List[Tuple[int, int, int, int]] = []
 
     total_batches = (n_products + batch_size - 1) // batch_size
-    for _ in tqdm_wrap(range(total_batches), total=total_batches, desc="Generate products", enabled=progress):
-        if cursor >= n_products:
+    for batch_idx in range(total_batches):
+        start = batch_idx * batch_size
+        if start >= n_products:
             break
-        k = min(batch_size, n_products - cursor)
+        k = min(batch_size, n_products - start)
         batch_seed = seed + 10_000 + batch_idx
-        payload = _call_products_batch(
-            backend=backend,
-            n=k,
-            seed=batch_seed,
-            base_seed=seed,
-            batch_idx=batch_idx,
-            settings=settings,
-        )
+        batch_specs.append((batch_idx, start, k, batch_seed))
+
+    ordered_payloads: List[Optional[str]] = [None] * len(batch_specs)
+    use_parallel = settings.max_workers > 1 and len(batch_specs) > 1
+
+    if use_parallel:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=settings.max_workers) as pool:
+            future_to_meta = {
+                pool.submit(
+                    _call_products_batch,
+                    backend=backend,
+                    n=k,
+                    seed=batch_seed,
+                    base_seed=seed,
+                    batch_idx=batch_idx,
+                    settings=settings,
+                ): (i, batch_idx)
+                for i, (batch_idx, start, k, batch_seed) in enumerate(batch_specs)
+            }
+
+            for future in tqdm_wrap(
+                concurrent.futures.as_completed(future_to_meta),
+                total=len(future_to_meta),
+                desc="Generate products",
+                enabled=progress,
+            ):
+                i, batch_idx = future_to_meta[future]
+                try:
+                    ordered_payloads[i] = future.result()
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"Product batch generation failed at batch_idx={batch_idx}"
+                    ) from exc
+    else:
+        for i, (batch_idx, start, k, batch_seed) in enumerate(
+            tqdm_wrap(batch_specs, total=len(batch_specs), desc="Generate products", enabled=progress)
+        ):
+            ordered_payloads[i] = _call_products_batch(
+                backend=backend,
+                n=k,
+                seed=batch_seed,
+                base_seed=seed,
+                batch_idx=batch_idx,
+                settings=settings,
+            )
+
+    out: List[ProductRecord] = []
+    for i, (batch_idx, start, k, batch_seed) in enumerate(batch_specs):
+        payload = ordered_payloads[i]
+        if payload is None:
+            raise RuntimeError("Product generation finished with a missing batch payload.")
+
         products = _parse_products_payload(payload, k_expected=k)
 
         for j, item in enumerate(products):
@@ -62,7 +106,7 @@ def generate_beer_product_records_llm(
             if not isinstance(attrs, dict):
                 raise ValueError(f"Product item missing attributes dict: {item!r}")
 
-            product_id = f"{product_id_prefix}_{cursor + j + 1:04d}"
+            product_id = f"{product_id_prefix}_{start + j + 1:04d}"
             rec = ProductRecord(
                 product_id=product_id,
                 attributes=attrs,
@@ -73,9 +117,6 @@ def generate_beer_product_records_llm(
             )
             rec.compute_keys()
             out.append(rec)
-
-        cursor += k
-        batch_idx += 1
 
     return out
 
