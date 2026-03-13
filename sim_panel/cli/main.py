@@ -15,6 +15,14 @@ from sim_panel.io.jsonl import read_jsonl_dicts, write_jsonl_rows
 from sim_panel.io.csv_io import write_csv_rows
 from sim_panel.io.metadata import build_metadata, write_metadata_json
 from sim_panel.io.dictionary import build_data_dictionary, write_data_dictionary_json
+from sim_panel.io.checkpoint import (
+    config_fingerprint,
+    read_checkpoint_state,
+    write_checkpoint_state,
+    read_checkpoint_rows,
+    append_checkpoint_rows,
+    clear_checkpoint,
+)
 
 from sim_panel.schema.validate import (
     validate_rows,
@@ -85,6 +93,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--no-progress",
         action="store_true",
         help="Disable progress display (tqdm if installed).",
+    )
+    g.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from checkpoint if a previous run was interrupted.",
     )
 
     # validate
@@ -170,11 +183,53 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         extra="(install tqdm for a nicer progress bar)" if not _has_tqdm() else "",
     )
 
-    rows = generator.generate(panelists=bundle.panelists, products=bundle.products)
+    # --- checkpoint / resume ---
+    resume_from_period = 0
+    prior_rows: Optional[List[Dict[str, Any]]] = None
+    fp = config_fingerprint(bundle.config_snapshot)
 
-    # Write events
+    if args.resume:
+        state = read_checkpoint_state(out_dir)
+        if state is not None:
+            if state.get("config_fingerprint") != fp:
+                print(
+                    "[checkpoint] Config has changed since last checkpoint — cannot resume. "
+                    "Delete checkpoint files or use a different output directory.",
+                    file=sys.stderr,
+                )
+                return 1
+            resume_from_period = state.get("completed_through", -1) + 1
+            if resume_from_period > 0:
+                prior_rows = read_checkpoint_rows(out_dir)
+                print(
+                    f"[checkpoint] Resuming: {resume_from_period} period(s) already complete, "
+                    f"{len(prior_rows)} rows loaded from checkpoint.",
+                    file=sys.stderr, flush=True,
+                )
+
+    def _on_period_complete(t: int, period_rows: List[Dict[str, Any]]) -> None:
+        append_checkpoint_rows(out_dir, period_rows)
+        write_checkpoint_state(out_dir, {
+            "config_fingerprint": fp,
+            "completed_through": t,
+            "n_periods": generator.cfg.n_periods,
+        })
+
+    rows = generator.generate(
+        panelists=bundle.panelists,
+        products=bundle.products,
+        progress=not bool(args.no_progress),
+        resume_from_period=resume_from_period,
+        prior_rows=prior_rows,
+        on_period_complete=_on_period_complete,
+    )
+
+    # Write final events (atomic)
     events_path = os.path.join(out_dir, names.events_jsonl)
     write_jsonl_rows(events_path, rows)
+
+    # Clean up checkpoint files now that final output is written
+    clear_checkpoint(out_dir)
 
     if args.csv:
         csv_path = os.path.join(out_dir, names.events_csv)

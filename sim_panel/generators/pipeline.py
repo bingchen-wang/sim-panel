@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import concurrent.futures
+import sys
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from sim_panel.utils.progress import tqdm_wrap
 from sim_panel.decisions.selection import (
@@ -32,6 +33,10 @@ from sim_panel.panelists.panelist import Panelist
 from sim_panel.products.product import Product
 
 
+# Type for checkpoint callback: called with (period, rows_for_period)
+OnPeriodComplete = Callable[[int, List[Dict[str, Any]]], None]
+
+
 @dataclass
 class EventGenerator:
     """
@@ -50,6 +55,9 @@ class EventGenerator:
         panelists: Sequence[Panelist],
         products: Sequence[Product],
         progress: bool = True,
+        resume_from_period: int = 0,
+        prior_rows: Optional[List[Dict[str, Any]]] = None,
+        on_period_complete: Optional[OnPeriodComplete] = None,
     ) -> List[Dict[str, Any]]:
         rng = make_rng(self.cfg.seed)
 
@@ -62,9 +70,26 @@ class EventGenerator:
         product_by_id = {p.product_id: p for p in products}
         panelist_by_id = {p.panelist_id: p for p in panelists}
 
-        rows: List[Dict[str, Any]] = []
+        # Start with prior rows from checkpoint (if resuming)
+        rows: List[Dict[str, Any]] = list(prior_rows) if prior_rows else []
 
-        for t in tqdm_wrap(range(self.cfg.n_periods), total=self.cfg.n_periods, desc="Periods", enabled=progress):
+        # Advance RNG past completed periods so seeds match a fresh run
+        for t in range(resume_from_period):
+            self._decide_for_period(
+                rng=rng, policy=policy, panelist_ids=panelist_ids,
+                t=t, product_ids=product_ids,
+            )
+
+        if resume_from_period > 0:
+            print(
+                f"[checkpoint] Resuming from period {resume_from_period}/{self.cfg.n_periods} "
+                f"({len(rows)} prior rows loaded)",
+                file=sys.stderr, flush=True,
+            )
+
+        remaining = range(resume_from_period, self.cfg.n_periods)
+
+        for t in tqdm_wrap(remaining, total=len(remaining), desc="Periods", enabled=progress):
             # generator owns time; update runtime agents
             for p in tqdm_wrap(panelists, total=len(panelists), desc=f"Set t={t}", enabled=progress and len(panelists) > 1000):
                 p.state.t = t
@@ -77,6 +102,8 @@ class EventGenerator:
                 t=t,
                 product_ids=product_ids,
             )
+
+            period_rows: List[Dict[str, Any]] = []
 
             # Execute decisions into events
             use_parallel = self.cfg.max_workers > 1 and len(decisions) > 1
@@ -114,10 +141,10 @@ class EventGenerator:
                 for batch in ordered_batches:
                     if batch is None:
                         raise RuntimeError("Parallel execution finished with a missing result batch.")
-                    rows.extend(batch)
+                    period_rows.extend(batch)
             else:
                 for dec in tqdm_wrap(decisions, total=len(decisions), desc=f"Execute t={t}", enabled=progress):
-                    rows.extend(
+                    period_rows.extend(
                         self._execute_decision(
                             dec=dec,
                             panelist=panelist_by_id[dec.panelist_id],
@@ -126,6 +153,11 @@ class EventGenerator:
                             outcome_model=outcome_model,
                         )
                     )
+
+            rows.extend(period_rows)
+
+            if on_period_complete is not None:
+                on_period_complete(t, period_rows)
 
         if self.cfg.validate_on_finish:
             self._validate(rows)
