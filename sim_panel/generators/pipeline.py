@@ -82,8 +82,10 @@ class EventGenerator:
             use_parallel = self.cfg.max_workers > 1 and len(decisions) > 1
 
             if use_parallel:
+                ordered_batches: List[Optional[List[Dict[str, Any]]]] = [None] * len(decisions)
+
                 with concurrent.futures.ThreadPoolExecutor(max_workers=self.cfg.max_workers) as pool:
-                    futures = {
+                    future_to_meta = {
                         pool.submit(
                             self._execute_decision,
                             dec=dec,
@@ -91,16 +93,28 @@ class EventGenerator:
                             product_by_id=product_by_id,
                             t=t,
                             outcome_model=outcome_model,
-                        ): dec
-                        for dec in decisions
+                        ): (idx, dec)
+                        for idx, dec in enumerate(decisions)
                     }
+
                     for future in tqdm_wrap(
-                        concurrent.futures.as_completed(futures),
-                        total=len(futures),
+                        concurrent.futures.as_completed(future_to_meta),
+                        total=len(future_to_meta),
                         desc=f"Execute t={t}",
                         enabled=progress,
                     ):
-                        rows.extend(future.result())
+                        idx, dec = future_to_meta[future]
+                        try:
+                            ordered_batches[idx] = future.result()
+                        except Exception as exc:
+                            raise RuntimeError(
+                                f"Decision execution failed at t={t}, idx={idx}, panelist_id={dec.panelist_id}"
+                            ) from exc
+
+                for batch in ordered_batches:
+                    if batch is None:
+                        raise RuntimeError("Parallel execution finished with a missing result batch.")
+                    rows.extend(batch)
             else:
                 for dec in tqdm_wrap(decisions, total=len(decisions), desc=f"Execute t={t}", enabled=progress):
                     rows.extend(
