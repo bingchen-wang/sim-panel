@@ -54,7 +54,11 @@ def render_selection_prompt(
     if prompting_strategy == "few_shot":
         lines.append("## Example Selection")
         lines.append("Given products about craft beverages, a respondent might select:")
-        ex = {"selected_product_ids": ["prod001", "prod003"], "traces": {"reasoning": "Selected based on personal taste preferences."}}
+        # Use actual product IDs from the choice set to prevent hallucination
+        example_ids = [ctx.products_shown[0]["product_id"]] if len(ctx.products_shown) >= 1 else []
+        if len(ctx.products_shown) >= 3:
+            example_ids.append(ctx.products_shown[2]["product_id"])
+        ex = {"selected_product_ids": example_ids, "traces": {"reasoning": "Selected based on personal taste preferences."}}
         lines.append(_pretty_json(ex))
         lines.append("")
 
