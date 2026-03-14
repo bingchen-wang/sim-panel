@@ -7,15 +7,15 @@ rating_scale: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 conditions:
   # --- Qwen 7B ---
-  - label: qwen7b_zeroshot
+  - label: qwen7b_zero_shot
     model: "Qwen 7B"
-    strategy: "zero-shot"
-    run_dir: /home/bd58/data/bd58/sim-panel/run_qwen7b_zeroshot
+    strategy: "zero_shot"
+    run_dir: /home/bd58/data/bd58/sim-panel/run_qwen7b_zero_shot
 
-  - label: qwen7b_fewshot
+  - label: qwen7b_few_shot
     model: "Qwen 7B"
-    strategy: "few-shot"
-    run_dir: /home/bd58/data/bd58/sim-panel/run_qwen7b_fewshot
+    strategy: "few_shot"
+    run_dir: /home/bd58/data/bd58/sim-panel/run_qwen7b_few_shot
 
   - label: qwen7b_persona
     model: "Qwen 7B"
@@ -24,19 +24,19 @@ conditions:
 
   - label: qwen7b_persona_cot
     model: "Qwen 7B"
-    strategy: "persona+CoT"
+    strategy: "persona_cot"
     run_dir: /home/bd58/data/bd58/sim-panel/run_qwen7b_persona_cot
 
   # --- Llama 3 8B ---
-  - label: llama3_zeroshot
+  - label: llama3_zero_shot
     model: "Llama 3 8B"
-    strategy: "zero-shot"
-    run_dir: /home/bd58/data/bd58/sim-panel/run_llama3_zeroshot
+    strategy: "zero_shot"
+    run_dir: /home/bd58/data/bd58/sim-panel/run_llama3_zero_shot
 
-  - label: llama3_fewshot
+  - label: llama3_few_shot
     model: "Llama 3 8B"
-    strategy: "few-shot"
-    run_dir: /home/bd58/data/bd58/sim-panel/run_llama3_fewshot
+    strategy: "few_shot"
+    run_dir: /home/bd58/data/bd58/sim-panel/run_llama3_few_shot
 
   - label: llama3_persona
     model: "Llama 3 8B"
@@ -45,19 +45,19 @@ conditions:
 
   - label: llama3_persona_cot
     model: "Llama 3 8B"
-    strategy: "persona+CoT"
+    strategy: "persona_cot"
     run_dir: /home/bd58/data/bd58/sim-panel/run_llama3_persona_cot
 
   # --- Mistral 7B ---
-  - label: mistral7b_zeroshot
+  - label: mistral7b_zero_shot
     model: "Mistral 7B"
-    strategy: "zero-shot"
-    run_dir: /home/bd58/data/bd58/sim-panel/run_mistral7b_zeroshot
+    strategy: "zero_shot"
+    run_dir: /home/bd58/data/bd58/sim-panel/run_mistral7b_zero_shot
 
-  - label: mistral7b_fewshot
+  - label: mistral7b_few_shot
     model: "Mistral 7B"
-    strategy: "few-shot"
-    run_dir: /home/bd58/data/bd58/sim-panel/run_mistral7b_fewshot
+    strategy: "few_shot"
+    run_dir: /home/bd58/data/bd58/sim-panel/run_mistral7b_few_shot
 
   - label: mistral7b_persona
     model: "Mistral 7B"
@@ -66,26 +66,26 @@ conditions:
 
   - label: mistral7b_persona_cot
     model: "Mistral 7B"
-    strategy: "persona+CoT"
+    strategy: "persona_cot"
     run_dir: /home/bd58/data/bd58/sim-panel/run_mistral7b_persona_cot
 
-  # --- 13B model ---
-  - label: 13b_zeroshot
-    model: "13B"
-    strategy: "zero-shot"
-    run_dir: /home/bd58/data/bd58/sim-panel/run_13b_zeroshot
+  # --- Ministral 14B ---
+  - label: 13b_zero_shot
+    model: "Ministral 14B"
+    strategy: "zero_shot"
+    run_dir: /home/bd58/data/bd58/sim-panel/run_13b_zero_shot
 
-  - label: 13b_fewshot
-    model: "13B"
-    strategy: "few-shot"
-    run_dir: /home/bd58/data/bd58/sim-panel/run_13b_fewshot
+  - label: 13b_few_shot
+    model: "Ministral 14B"
+    strategy: "few_shot"
+    run_dir: /home/bd58/data/bd58/sim-panel/run_13b_few_shot
 
   - label: 13b_persona
-    model: "13B"
+    model: "Ministral 14B"
     strategy: "persona"
     run_dir: /home/bd58/data/bd58/sim-panel/run_13b_persona
 
   - label: 13b_persona_cot
-    model: "13B"
-    strategy: "persona+CoT"
+    model: "Ministral 14B"
+    strategy: "persona_cot"
     run_dir: /home/bd58/data/bd58/sim-panel/run_13b_persona_cot

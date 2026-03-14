@@ -6,8 +6,8 @@ backend:
   model: gemma3:12b
   return_usage: true
   params:
-    base_url: "http://localhost:11434"
-    timeout_s: 180
+    base_url: "http://localhost:11438"
+    timeout_s: 300
 
 output:
   personas_path: /home/bd58/data/bd58/sim-panel/data/personas_phase1.jsonl
