@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple
 
 
 FieldType = Literal["int", "float", "categorical", "bool", "text", "json"]
-
+AnalysisType = Literal["continuous", "binary", "nominal", "ordinal"]
 
 @dataclass(frozen=True)
 class FieldSpec:
@@ -30,6 +30,21 @@ class FieldSpec:
     required:
       If False, missing key is allowed. If True, missing is a validation error.
 
+    analysis_type:
+      Optional analysis-facing semantic type. This does not affect prompt rendering
+      or payload validation used by existing outcome modules. It is intended for
+      downstream analysis modules such as regression.
+
+      Allowed values:
+      - "continuous"
+      - "binary"
+      - "nominal"
+      - "ordinal"
+
+    choice_order:
+      Optional explicit ordering for ordinal outcomes. If omitted, downstream
+      analysis may fall back to `choices` if appropriate.      
+
     min_value/max_value:
       Optional numeric constraints for int/float.
     """
@@ -41,6 +56,8 @@ class FieldSpec:
     required: bool = True
     min_value: Optional[float] = None
     max_value: Optional[float] = None
+    analysis_type: Optional[AnalysisType] = None
+    choice_order: Optional[Tuple[Any]] = None
 
     def validate_value(self, v: Any) -> Optional[str]:
         if v is None:
@@ -68,8 +85,6 @@ class FieldSpec:
         elif t == "categorical":
             if self.choices is None or len(self.choices) == 0:
                 return f"Field '{self.name}' is categorical but has no choices."
-            if v not in self.choices:
-                return f"Field '{self.name}' must be one of {self.choices}, got {v!r}."
         elif t == "text":
             if not isinstance(v, str):
                 return f"Field '{self.name}' expects text (string), got {type(v).__name__}."
@@ -247,6 +262,23 @@ def _parse_fields(fields_cfg: Any, section: str) -> List[FieldSpec]:
         if maxv is not None and not isinstance(maxv, (int, float)):
             raise ValueError(f"{section}.fields['{name}'].max must be numeric if provided.")
 
+        analysis_type = raw.get("analysis_type")
+        if analysis_type is not None:
+            if analysis_type not in {"continuous", "binary", "nominal", "ordinal"}:
+                raise ValueError(
+                    f"{section}.fields['{name}'].analysis_type must be one of "
+                    "['continuous', 'binary', 'nominal', 'ordinal'] if provided."
+                )
+
+        choice_order = raw.get("choice_order")
+        if choice_order is not None and not isinstance(choice_order, list):
+            raise ValueError(
+                f"{section}.fields['{name}'].choice_order must be a list if provided."
+            )
+
+        choice_order_tuple = tuple(choice_order) if choice_order is not None else None
+
+
         fs = FieldSpec(
             name=name,
             type=ftype,  # type: ignore[assignment]
@@ -256,11 +288,40 @@ def _parse_fields(fields_cfg: Any, section: str) -> List[FieldSpec]:
             required=required,
             min_value=float(minv) if minv is not None else None,
             max_value=float(maxv) if maxv is not None else None,
+            analysis_type=analysis_type,
+            choice_order=choice_order_tuple,
         )
 
         # A few sanity checks
         if fs.type == "categorical" and (fs.choices is None or len(fs.choices) == 0):
             raise ValueError(f"{section}.fields['{name}'] categorical requires non-empty choices.")
+
+        if fs.analysis_type == "binary" and fs.choices is not None and len(fs.choices) != 2:
+            raise ValueError(
+                f"{section}.fields['{name}'] analysis_type='binary' requires exactly 2 choices "
+                f"when choices are provided, got {len(fs.choices)}."
+            )
+
+        if fs.choice_order is not None and fs.analysis_type != "ordinal":
+            raise ValueError(
+                f"{section}.fields['{name}'].choice_order is only valid when "
+                "analysis_type='ordinal'."
+            )
+
+        if fs.analysis_type == "ordinal":
+            if fs.choice_order is None and fs.choices is None:
+                raise ValueError(
+                    f"{section}.fields['{name}'] analysis_type='ordinal' requires "
+                    "either choice_order or choices."
+                )
+            if fs.choice_order is not None and fs.choices is not None:
+                if set(fs.choice_order) != set(fs.choices):
+                    raise ValueError(
+                        f"{section}.fields['{name}'].choice_order must contain the same "
+                        "elements as choices."
+                    )
+
+
         out.append(fs)
 
     return out

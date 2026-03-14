@@ -1474,6 +1474,415 @@ The current markdown report includes:
 
 This report is intentionally lightweight. Richer report generation (e.g. more detailed narrative sections, embedded tables, or HTML output) is deferred until the summary/metric contracts stabilize further.
 
+### Regression analysis module
+
+`sim_panel/analysis/regression/` adds a regression layer on top of `RunAnalysis`, so model fitting can be run directly from analyzed event data without introducing a separate preprocessing pipeline.
+
+#### What it does
+
+The regression module currently supports:
+
+- continuous outcomes via `ols`
+- binary outcomes via `logit` and `probit`
+- nominal categorical outcomes via `multinomial_logit`
+- ordinal categorical outcomes via `ordered_logit` and `ordered_probit`
+
+The module is questionnaire-aware. It uses `FieldSpec.analysis_type` and related metadata from `QuestionnaireSpec` to validate whether a requested regression family is compatible with the selected outcome field.
+
+#### Design philosophy
+
+The regression layer is intended primarily for:
+
+- descriptive diagnostics
+- fit comparison across specifications
+- coefficient pattern inspection
+- evaluating whether observed attributes or fixed effects explain synthetic outcomes
+
+It is **not** positioned as a full econometrics package for strong inferential claims. In particular, standard errors and p-values should be interpreted cautiously when:
+
+- observations are repeated within panelists and/or products
+- clustering is limited
+- the design is highly saturated
+- synthetic runs are small
+
+#### Main components
+
+- `registry.py`
+  Resolves outcome fields into regression-facing `OutcomeSpec` objects and checks family compatibility.
+
+- `design.py`
+  Builds design matrices from `RunAnalysis.evaluation_rows` using the shared flattened evaluation dataframe from `analysis.tables`.
+
+- `preprocess.py`
+  Applies target coercion, dummy encoding, optional standardization, intercept handling, and collinearity safeguards.
+
+- `families/`
+  Implements family-specific fitting logic:
+  - `ols.py`
+  - `discrete.py`
+
+- `fit.py`
+  End-to-end dispatcher:
+  - validates the regression request
+  - builds and preprocesses the design matrix
+  - resolves covariance settings
+  - dispatches to the requested family
+
+- `summarize.py`
+  Converts regression results into compact summary rows and filtered coefficient tables.
+
+- `io.py`
+  Saves per-model regression outputs to disk.
+
+#### Supported regression designs
+
+The current design names are:
+
+- `panelist_features`
+- `product_features`
+- `panelist_plus_product_features`
+- `panelist_id_fe`
+- `product_id_fe`
+- `two_way_fe`
+- `features_plus_two_way_fe`
+
+These are built from the flattened evaluation dataframe:
+
+- `panelist.*` columns come from `panelist_features`
+- `product.*` columns come from `product_features`
+- `panelist_id` and `product_id` can be used as fixed-effect identifiers
+
+#### Collinearity handling
+
+The preprocessing layer includes explicit guards against exact collinearity:
+
+- categorical regressors are dummy-encoded with reference-category coding
+- constant columns are dropped
+- duplicate columns are dropped
+- rank-deficient columns are dropped via incremental rank checking
+
+This is especially important for fixed-effect-heavy specifications such as `two_way_fe` and `features_plus_two_way_fe`.
+
+Note that in FE-heavy designs, some static attributes may be absorbed or nearly absorbed by the fixed effects. The preprocessing step records dropped columns so this behavior is auditable.
+
+#### Covariance / inference options
+
+The regression options support several covariance choices:
+
+- `nonrobust`
+- `HC1`
+- `cluster_panelist`
+- `cluster_product`
+- `cluster_two_way`
+
+Current support:
+
+- `cluster_two_way` is enabled for `ols`
+- nonlinear families currently support the one-way and robust options exposed by the underlying `statsmodels` fit path, but not two-way clustered covariance
+
+#### Output artifacts
+
+When regression is enabled in analysis config, the analysis run stores a `regression` artifact under `run.artifacts["regression"]`.
+
+Each requested spec can produce:
+
+- a compact summary row
+- a full coefficient table
+- an attribute-only coefficient table
+- a top-attribute coefficient table
+- a dropped-columns table
+- metadata describing covariance type and preprocessing behavior
+
+If saving is enabled, these are written under:
+
+- `analysis/regression/`
+
+Typical files include:
+
+- `*_summary.json`
+- `*_metadata.json`
+- `*_coefficients_full.csv`
+- `*_coefficients_attributes.csv`
+- `*_coefficients_top_attributes.csv`
+- `*_dropped_columns.csv`
+
+The markdown report also includes:
+
+- a regression section
+- compact coefficient tables
+- dropped-column tables
+- an inference caution note
+
+#### Interpretation caution
+
+Regression outputs are useful for diagnosis and comparison, but should be read carefully.
+
+In particular:
+
+- fixed effects do not by themselves make errors iid
+- repeated evaluation rows induce grouped dependence
+- clustered inference can be unstable in small runs
+- FE-heavy specifications may absorb static panelist/product features
+- missing standard errors or confidence intervals usually indicate inference instability, not necessarily missing coefficient estimates
+
+---
+
+### Analysis YAML: regression-enabled example
+
+Below is a documented example analysis config showing all currently supported analysis sections, including regression.
+
+```yaml
+run_dir: outputs/run_beer_demo_large_self_selection
+output_dir: outputs/run_beer_demo_large_self_selection/analysis
+
+load:
+  # Resolve linked persona/product source files if metadata points to them.
+  resolve_sources: true
+
+  # Prefer extra metadata paths when multiple possible source paths exist.
+  prefer_extra_paths: true
+
+  # If true, fail hard when linked sources cannot be resolved.
+  strict_source_resolution: false
+
+summaries:
+  # High-level run diagnostics.
+  run: true
+
+  # Per-outcome summary tables.
+  outcomes: true
+
+  # Per-trace summary tables.
+  traces: true
+
+  # Selection summary for runs with selection events.
+  selections: true
+
+metrics:
+  # Coverage / missingness / linking checks.
+  quality: true
+
+  # Outcome diversity metrics.
+  diversity: true
+
+  # Panelist/product differentiation metrics.
+  persona: true
+
+  # Selection concentration / entropy metrics.
+  selection: true
+
+plots:
+  outcome_distributions:
+    # Plot per-outcome distributions.
+    enabled: true
+
+    # If true, show normalized shares rather than raw counts.
+    normalize_to_share: false
+
+    # Optional subset of outcome fields. Null means all eligible fields.
+    fields: null
+
+    # Figure size as [width, height].
+    figsize: [7, 4.5]
+
+  panelist_summary:
+    # Summary bars over panelists for a chosen outcome.
+    enabled: true
+
+    # Outcome field used for aggregation.
+    outcome_field: rating
+
+    # Supported summary metrics currently include "mean" and "variance".
+    metrics: [mean, variance]
+
+    # Maximum number of items displayed.
+    max_items: 30
+
+    # Current sort options depend on plotting implementation; common values include:
+    # - label_asc
+    # - mean_desc
+    # - variance_desc
+    sort_by: label_asc
+
+    # Horizontal or vertical bar layout.
+    horizontal: false
+
+  product_summary:
+    enabled: true
+    outcome_field: rating
+    metrics: [mean, variance]
+    max_items: 30
+    sort_by: label_asc
+    horizontal: false
+
+  selection_concentration:
+    # Plot concentration of requested/executed products.
+    enabled: true
+
+    # Supported modes:
+    # - requested
+    # - executed
+    modes: [executed, requested]
+
+    # Number of products to display.
+    top_k: 15
+
+    horizontal: true
+
+regression:
+  # Master toggle for regression analysis.
+  enabled: true
+
+  # Whether per-model regression outputs should be written to disk.
+  save_results: true
+
+  # Subdirectory under analysis output for regression files.
+  output_subdir: regression
+
+  options:
+    # Drop rows with missing regressors or target before fitting.
+    drop_missing: true
+
+    # Standardize numeric regressors before fitting.
+    standardize_numeric: false
+
+    # Add intercept where relevant.
+    add_intercept: true
+
+    # Maximum optimizer iterations for nonlinear models.
+    max_iter: 200
+
+    # Whether to request coefficient-level inference outputs.
+    include_inference: true
+
+    # Confidence level used for confidence intervals.
+    confidence_level: 0.95
+
+    # Supported covariance types:
+    # - nonrobust
+    # - HC1
+    # - cluster_panelist
+    # - cluster_product
+    # - cluster_two_way   # currently OLS only
+    covariance_type: cluster_panelist
+
+  specs:
+    # Each entry defines one requested regression.
+    # family must be compatible with the questionnaire outcome field.
+
+    - family: ols
+      design: panelist_plus_product_features
+      outcome_field: rating
+
+    - family: ols
+      design: two_way_fe
+      outcome_field: rating
+
+    - family: ols
+      design: features_plus_two_way_fe
+      outcome_field: rating
+
+export:
+  # Export CSV artifacts where supported.
+  csv: true
+
+  # Export JSON artifacts.
+  json: true
+
+  # Export markdown report.
+  markdown: true
+
+  # If false, existing files are preserved.
+  overwrite: true
+```
+
+---
+
+### Available options by section
+
+#### `load`
+- `resolve_sources`: `true | false`
+- `prefer_extra_paths`: `true | false`
+- `strict_source_resolution`: `true | false`
+
+#### `summaries`
+- `run`: `true | false`
+- `outcomes`: `true | false`
+- `traces`: `true | false`
+- `selections`: `true | false`
+
+#### `metrics`
+- `quality`: `true | false`
+- `diversity`: `true | false`
+- `persona`: `true | false`
+- `selection`: `true | false`
+
+#### `plots.outcome_distributions`
+- `enabled`: `true | false`
+- `normalize_to_share`: `true | false`
+- `fields`: `null | [field_name, ...]`
+- `figsize`: `[width, height]`
+
+#### `plots.panelist_summary` and `plots.product_summary`
+- `enabled`: `true | false`
+- `outcome_field`: string
+- `metrics`: list of metric names, currently typically:
+  - `mean`
+  - `variance`
+- `max_items`: integer
+- `sort_by`: string
+- `horizontal`: `true | false`
+
+#### `plots.selection_concentration`
+- `enabled`: `true | false`
+- `modes`: subset of:
+  - `requested`
+  - `executed`
+- `top_k`: integer
+- `horizontal`: `true | false`
+
+#### `regression.options`
+- `drop_missing`: `true | false`
+- `standardize_numeric`: `true | false`
+- `add_intercept`: `true | false`
+- `max_iter`: integer
+- `include_inference`: `true | false`
+- `confidence_level`: float, usually `0.95`
+- `covariance_type`:
+  - `nonrobust`
+  - `HC1`
+  - `cluster_panelist`
+  - `cluster_product`
+  - `cluster_two_way`
+
+#### `regression.specs[*].family`
+- `ols`
+- `logit`
+- `probit`
+- `multinomial_logit`
+- `ordered_logit`
+- `ordered_probit`
+
+#### `regression.specs[*].design`
+- `panelist_features`
+- `product_features`
+- `panelist_plus_product_features`
+- `panelist_id_fe`
+- `product_id_fe`
+- `two_way_fe`
+- `features_plus_two_way_fe`
+
+#### `regression.specs[*].outcome_field`
+Any questionnaire outcome field name that is present in the run metadata and compatible with the requested family.
+
+#### `export`
+- `csv`: `true | false`
+- `json`: `true | false`
+- `markdown`: `true | false`
+- `overwrite`: `true | false`
+
+---
+
 
 ### Current scope and limitations
 
@@ -1485,22 +1894,11 @@ At present, the analysis layer supports:
 - core metrics for quality, diversity, panelist/product differentiation, and selection behavior
 - `plots.py` for visual outputs
 - markdown report generation
-
-The following components are planned but not yet implemented:
-
 - multi-run comparison layer
 - regression-based attribute diagnostics for consistency and feature usefulness
+
+The following component(s) are planned but not yet implemented:
+
 - benchmark-style comparison against real observed data
 
-These later components should build on the current single-run summary/metric contracts rather than bypassing them.
-
-### Planned extension: regression-based diagnostics
-
-A natural future extension is an analysis module for regression-based diagnostics, likely via a separate file such as `analysis/regression.py`. Its role would be to move beyond descriptive variation metrics and ask questions such as:
-
-- do declared panelist attributes actually predict realized outcomes?
-- do product attributes explain structured variation in ratings?
-- are generated personas behaviorally consistent with their stated attributes?
-- does a given prompting or generation setup increase the usefulness of attributes?
-
-This is intentionally deferred for now so that the core summary/metric layer can stabilize first.
+These later component(s) should build on the current single-run summary/metric contracts rather than bypassing them.

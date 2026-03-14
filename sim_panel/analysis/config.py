@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Optional
 
+from sim_panel.analysis.regression.types import RegressionOptions, RegressionSpec
 from sim_panel.analysis.types import (
     AnalysisConfig,
     ExportConfig,
@@ -9,6 +10,7 @@ from sim_panel.analysis.types import (
     MetricConfig,
     OutcomeDistributionPlotConfig,
     PlotConfig,
+    RegressionConfig,
     SelectionConcentrationPlotConfig,
     SummaryBarPlotConfig,
     SummaryConfig,
@@ -35,6 +37,7 @@ def build_analysis_config_from_dict(d: Mapping[str, Any]) -> AnalysisConfig:
         metrics:
         plots:
         export:
+        regression:
     """
     run_dir = _require_str(d, "run_dir")
     output_dir = _require_str(d, "output_dir")
@@ -44,6 +47,7 @@ def build_analysis_config_from_dict(d: Mapping[str, Any]) -> AnalysisConfig:
     metrics_raw = _get_mapping(d, "metrics", default={})
     plots_raw = _get_mapping(d, "plots", default={})
     export_raw = _get_mapping(d, "export", default={})
+    regression_raw = _get_mapping(d, "regression", default={})
 
     load_cfg = LoadConfig(
         resolve_sources=_get_bool(load_raw, "resolve_sources", default=True),
@@ -116,6 +120,8 @@ def build_analysis_config_from_dict(d: Mapping[str, Any]) -> AnalysisConfig:
         overwrite=_get_bool(export_raw, "overwrite", default=True),
     )
 
+    regression_cfg = _build_regression_config(regression_raw)
+
     return AnalysisConfig(
         run_dir=run_dir,
         output_dir=output_dir,
@@ -124,6 +130,53 @@ def build_analysis_config_from_dict(d: Mapping[str, Any]) -> AnalysisConfig:
         metrics=metrics_cfg,
         plots=plots_cfg,
         export=export_cfg,
+        regression=regression_cfg,
+    )
+
+
+def _build_regression_config(d: Mapping[str, Any]) -> RegressionConfig:
+    enabled = _get_bool(d, "enabled", default=False)
+    save_results = _get_bool(d, "save_results", default=True)
+    output_subdir = _get_str(d, "output_subdir", default="regression") or "regression"
+
+    options_raw = _get_mapping(d, "options", default={})
+    specs_raw = d.get("specs", [])
+    if specs_raw is None:
+        specs_raw = []
+    if not isinstance(specs_raw, list):
+        raise ValueError("regression.specs must be a list")
+
+    options = RegressionOptions(
+        drop_missing=_get_bool(options_raw, "drop_missing", default=True),
+        standardize_numeric=_get_bool(options_raw, "standardize_numeric", default=False),
+        add_intercept=_get_bool(options_raw, "add_intercept", default=True),
+        max_iter=_get_int(options_raw, "max_iter", default=200),
+        include_inference=_get_bool(options_raw, "include_inference", default=True),
+        confidence_level=_get_float(options_raw, "confidence_level", default=0.95),
+        covariance_type=_get_str(options_raw, "covariance_type", default="nonrobust") or "nonrobust",
+    )
+
+    specs: list[RegressionSpec] = []
+    for i, item in enumerate(specs_raw):
+        if not isinstance(item, Mapping):
+            raise ValueError(f"regression.specs[{i}] must be a mapping/dict")
+        family = _require_str(item, "family")
+        design = _require_str(item, "design")
+        outcome_field = _require_str(item, "outcome_field")
+        specs.append(
+            RegressionSpec(
+                family=family,
+                design=design,
+                outcome_field=outcome_field,
+            )
+        )
+
+    return RegressionConfig(
+        enabled=enabled,
+        specs=specs,
+        options=options,
+        save_results=save_results,
+        output_subdir=output_subdir,
     )
 
 
@@ -153,6 +206,7 @@ def _get_bool(d: Mapping[str, Any], key: str, default: bool) -> bool:
         raise ValueError(f"{key} must be a bool")
     return v
 
+
 def _get_int(d: Mapping[str, Any], key: str, default: int) -> int:
     if key not in d or d.get(key) is None:
         return default
@@ -160,6 +214,15 @@ def _get_int(d: Mapping[str, Any], key: str, default: int) -> int:
     if not isinstance(v, int):
         raise ValueError(f"{key} must be an int")
     return v
+
+
+def _get_float(d: Mapping[str, Any], key: str, default: float) -> float:
+    if key not in d or d.get(key) is None:
+        return default
+    v = d.get(key)
+    if not isinstance(v, (int, float)):
+        raise ValueError(f"{key} must be numeric")
+    return float(v)
 
 
 def _get_str(d: Mapping[str, Any], key: str, default: Optional[str]) -> Optional[str]:

@@ -1,0 +1,20 @@
+{
+  "family": "ols",
+  "design": "panelist_plus_product_features",
+  "outcome_field": "bitterness",
+  "n_obs": 60,
+  "n_features": 28,
+  "covariance_type": "cluster",
+  "n_unique_panelist_clusters": 20,
+  "n_unique_product_clusters": 9,
+  "n_dropped_constant_columns": 0,
+  "n_dropped_duplicate_columns": 1,
+  "n_dropped_rank_deficient_columns": 16,
+  "r2": 0.7575382407286964,
+  "adj_r2": 0.5529611313435339,
+  "aic": 96.76670160794235,
+  "bic": 155.40834935016116,
+  "log_likelihood": -20.383350803971176,
+  "rmse": 0.3398618662005221,
+  "mae": 0.2673293055164445
+}

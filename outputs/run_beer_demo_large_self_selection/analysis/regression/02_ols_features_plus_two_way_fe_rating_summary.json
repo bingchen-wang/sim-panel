@@ -1,0 +1,20 @@
+{
+  "family": "ols",
+  "design": "features_plus_two_way_fe",
+  "outcome_field": "rating",
+  "n_obs": 60,
+  "n_features": 28,
+  "covariance_type": "cluster",
+  "n_unique_panelist_clusters": 20,
+  "n_unique_product_clusters": 9,
+  "n_dropped_constant_columns": 0,
+  "n_dropped_duplicate_columns": 5,
+  "n_dropped_rank_deficient_columns": 39,
+  "r2": 0.6537687866864681,
+  "adj_r2": 0.36163620045317557,
+  "aic": 153.73918056424532,
+  "bic": 212.38082830646414,
+  "log_likelihood": -48.86959028212266,
+  "rmse": 0.546377384365321,
+  "mae": 0.43947720057993894
+}

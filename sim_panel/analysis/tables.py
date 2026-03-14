@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import pandas as pd
 from collections import Counter
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Mapping
 
 from sim_panel.analysis.metadata import (
     get_questionnaire_outcome_fields,
@@ -332,3 +333,95 @@ def safe_mean(values: List[int]) -> Optional[float]:
     if not values:
         return None
     return sum(values) / len(values)
+
+def build_evaluation_dataframe(run: RunAnalysis) -> pd.DataFrame:
+    """
+    Build a flat evaluation-level dataframe from run.evaluation_rows.
+
+    Included blocks:
+    - identifiers / context:
+        _row_ix, event_id, panelist_id, product_id, selection_id, t, policy
+    - outcomes:
+        one column per outcome field under event["outcomes"]
+    - flattened panelist features:
+        panelist.<...>
+    - flattened product features:
+        product.<...>
+
+    Excluded in v0:
+    - traces
+    - product_display
+    - arbitrary free text fields
+    """
+    rows: List[Dict[str, Any]] = []
+
+    for row_ix, row in enumerate(run.evaluation_rows):
+        if not isinstance(row, Mapping):
+            continue
+
+        if row.get("event_type") != "evaluation":
+            continue
+
+        out: Dict[str, Any] = {
+            "_row_ix": row_ix,
+            "event_id": row.get("event_id"),
+            "panelist_id": row.get("panelist_id"),
+            "product_id": row.get("product_id"),
+            "selection_id": row.get("selection_id"),
+            "t": row.get("t"),
+            "policy": row.get("policy"),
+        }
+
+        outcomes = row.get("outcomes")
+        if isinstance(outcomes, Mapping):
+            for k, v in outcomes.items():
+                out[k] = v
+
+        panelist_features = row.get("panelist_features")
+        if isinstance(panelist_features, Mapping):
+            out.update(_flatten_feature_mapping(panelist_features, prefix="panelist"))
+
+        product_features = row.get("product_features")
+        if isinstance(product_features, Mapping):
+            out.update(_flatten_feature_mapping(product_features, prefix="product"))
+
+        rows.append(out)
+
+    if not rows:
+        raise ValueError("RunAnalysis contains no usable evaluation rows.")
+
+    return pd.DataFrame(rows)
+
+
+def _flatten_feature_mapping(
+    obj: Mapping[str, Any],
+    *,
+    prefix: str,
+) -> Dict[str, Any]:
+    """
+    Flatten a nested feature mapping into dotted columns.
+
+    Rules:
+    - nested dicts are recursively flattened
+    - scalar leaves are kept
+    - lists are skipped in v0
+    - column names are namespaced with the provided prefix
+    """
+    out: Dict[str, Any] = {}
+
+    def _walk(value: Any, path: List[str]) -> None:
+        if isinstance(value, Mapping):
+            for k, v in value.items():
+                _walk(v, path + [str(k)])
+            return
+
+        if isinstance(value, list):
+            return
+
+        col = ".".join([prefix] + path)
+        out[col] = value
+
+    for key, value in obj.items():
+        _walk(value, [str(key)])
+
+    return out

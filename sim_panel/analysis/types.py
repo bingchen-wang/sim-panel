@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from sim_panel.analysis.regression.types import RegressionOptions, RegressionSpec
+
 
 @dataclass(frozen=True)
 class LoadConfig:
@@ -96,6 +98,7 @@ class PlotConfig:
         default_factory=SelectionConcentrationPlotConfig
     )
 
+
 @dataclass(frozen=True)
 class ExportConfig:
     """
@@ -106,6 +109,19 @@ class ExportConfig:
     json: bool = True
     markdown: bool = True
     overwrite: bool = True
+
+
+@dataclass(frozen=True)
+class RegressionConfig:
+    """
+    Controls optional regression analysis.
+    """
+
+    enabled: bool = False
+    specs: List[RegressionSpec] = field(default_factory=list)
+    options: RegressionOptions = field(default_factory=RegressionOptions)
+    save_results: bool = True
+    output_subdir: str = "regression"
 
 
 @dataclass(frozen=True)
@@ -122,6 +138,7 @@ class AnalysisConfig:
     metrics: MetricConfig = field(default_factory=MetricConfig)
     plots: PlotConfig = field(default_factory=PlotConfig)
     export: ExportConfig = field(default_factory=ExportConfig)
+    regression: RegressionConfig = field(default_factory=RegressionConfig)
 
 
 @dataclass

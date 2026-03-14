@@ -1,0 +1,13 @@
+{
+  "family": "ols",
+  "design": "two_way_fe",
+  "outcome_field": "rating",
+  "covariance_type": "cluster",
+  "model_class": "OLS",
+  "converged": true,
+  "n_unique_panelist_clusters": 20,
+  "n_unique_product_clusters": 9,
+  "dropped_constant_columns": [],
+  "dropped_duplicate_columns": [],
+  "dropped_rank_deficient_columns": []
+}
