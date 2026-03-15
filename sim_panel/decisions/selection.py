@@ -53,12 +53,8 @@ def render_selection_prompt(
 
     if prompting_strategy == "few_shot":
         lines.append("## Example Selection")
-        lines.append("Given products about craft beverages, a respondent might select:")
-        # Use actual product IDs from the choice set to prevent hallucination
-        example_ids = [ctx.products_shown[0]["product_id"]] if len(ctx.products_shown) >= 1 else []
-        if len(ctx.products_shown) >= 3:
-            example_ids.append(ctx.products_shown[2]["product_id"])
-        ex = {"selected_product_ids": example_ids, "traces": {"reasoning": "Selected based on personal taste preferences."}}
+        intro, ex = _build_few_shot_selection_example(ctx=ctx, cfg=cfg)
+        lines.append(intro)
         lines.append(_pretty_json(ex))
         lines.append("")
 
@@ -209,6 +205,74 @@ def apply_execution_rules(
 # --------------------
 # helpers
 # --------------------
+
+def _build_few_shot_selection_example(
+    *,
+    ctx: SelectionContext,
+    cfg: SelectionConfig,
+) -> Tuple[str, Dict[str, Any]]:
+    custom = cfg.custom_few_shot_example
+    if isinstance(custom, dict):
+        intro = str(custom.get("intro", "")).strip() or "Example of a valid selection response:"
+        response = custom.get("response")
+        if isinstance(response, dict):
+            ex = _resolve_selection_example_response(response=response, ctx=ctx)
+            return intro, ex
+
+    example_ids = [ctx.products_shown[0]["product_id"]] if len(ctx.products_shown) >= 1 else []
+    if len(ctx.products_shown) >= 3:
+        example_ids.append(ctx.products_shown[2]["product_id"])
+    ex = {
+        "selected_product_ids": example_ids,
+        "traces": {"reasoning": "Selected based on personal preferences."},
+    }
+    return "Example of a valid selection response:", ex
+
+
+def _resolve_selection_example_response(
+    *,
+    response: Dict[str, Any],
+    ctx: SelectionContext,
+) -> Dict[str, Any]:
+    out = dict(response)
+
+    selected = out.get("selected_product_ids")
+    if isinstance(selected, list):
+        resolved: List[str] = []
+        for item in selected:
+            if not isinstance(item, str):
+                continue
+            pid = _resolve_selection_example_product_token(item, ctx.products_shown)
+            if pid is None:
+                continue
+            resolved.append(pid)
+        out["selected_product_ids"] = _dedupe_preserve_order(resolved)
+
+    traces = out.get("traces")
+    if traces is not None and not isinstance(traces, dict):
+        out["traces"] = None
+
+    return out
+
+
+def _resolve_selection_example_product_token(
+    token: str,
+    products_shown: Sequence[Dict[str, Any]],
+) -> Optional[str]:
+    if token == "__FIRST_SHOWN__":
+        return str(products_shown[0]["product_id"]) if len(products_shown) >= 1 else None
+    if token == "__SECOND_SHOWN_IF_AVAILABLE__":
+        return str(products_shown[1]["product_id"]) if len(products_shown) >= 2 else None
+    if token == "__THIRD_SHOWN_IF_AVAILABLE__":
+        return str(products_shown[2]["product_id"]) if len(products_shown) >= 3 else None
+
+    shown_ids = {
+        str(p.get("product_id", ""))
+        for p in products_shown
+        if str(p.get("product_id", "")).strip()
+    }
+    return token if token in shown_ids else None
+
 
 def _extract_json_object(text: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     if text is None:

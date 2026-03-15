@@ -89,6 +89,7 @@ def build_run_from_dict(d: Mapping[str, Any], *, config_path: Optional[str] = No
         require_json_only=_get_bool(selection_cfg_raw, "require_json_only", default=True),
         max_selected_soft=_get_optional_int(selection_cfg_raw, "max_selected_soft", default=None),
         include_raw_text=_get_bool(selection_cfg_raw, "include_raw_text", default=True),
+        custom_few_shot_example=_get_mapping(selection_cfg_raw, "custom_few_shot_example", default=None),
     )
 
     # --- execution rules ---

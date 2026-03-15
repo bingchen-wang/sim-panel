@@ -21,8 +21,11 @@ class LLMOutcomeModel:
 
     def evaluate(self, *, panelist, ctx: EvaluationContext, prompting_strategy: str = "persona") -> OutcomeResult:
         prompt = render_evaluation_prompt(
-            ctx=ctx, questionnaire=self.cfg.questionnaire,
-            include_features=True, prompting_strategy=prompting_strategy,
+            ctx=ctx, 
+            questionnaire=self.cfg.questionnaire,
+            include_features=True, 
+            outcome_cfg=self.cfg,
+            prompting_strategy=prompting_strategy,
         )
 
         # Determine system prompt based on strategy

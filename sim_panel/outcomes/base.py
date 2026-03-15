@@ -42,6 +42,19 @@ class OutcomeConfig:
     # Whether to include the raw model text in OutcomeResult (useful for debugging)
     include_raw_text: bool = True
 
+    # Optional few-shot exemplar override used only when prompting_strategy == "few_shot".
+    # If absent, built-in few-shot prompting should remain general.
+    #
+    # Expected shape:
+    # {
+    #   "intro": "For a product like 'Classic Lager - A traditional pale lager with crisp finish', a respondent might answer:",
+    #   "response": {
+    #       "outcomes": {"rating": 7, "purchase_intent": "maybe"},
+    #       "traces": {"rationale": "Solid traditional beer, nothing exceptional but reliable."}
+    #   }
+    # }
+    custom_few_shot_example: Optional[Dict[str, Any]] = None
+
 
 class OutcomeModel(Protocol):
     cfg: OutcomeConfig

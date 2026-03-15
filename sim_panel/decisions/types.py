@@ -50,6 +50,22 @@ class SelectionConfig:
     # Include raw text in SelectionResult (debugging)
     include_raw_text: bool = True
 
+    # Optional few-shot exemplar override used only when prompting_strategy == "few_shot".
+    # If absent, built-in few-shot prompting should remain general.
+    #
+    # Expected shape:
+    # {
+    #   "intro": "Given products about craft beverages, a respondent might select:",
+    #   "response": {
+    #       "selected_product_ids": ["__FIRST_SHOWN__", "__THIRD_SHOWN_IF_AVAILABLE__"],
+    #       "traces": {"reasoning": "Selected based on personal taste preferences."}
+    #   }
+    # }
+    #
+    # selected_product_ids may contain either literal product_ids or reserved placeholders
+    # to be resolved against ctx.products_shown at render time.
+    custom_few_shot_example: Optional[Dict[str, Any]] = None    
+
 
 @dataclass(frozen=True)
 class ExecutionRules:

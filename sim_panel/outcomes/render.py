@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from sim_panel.outcomes.base import EvaluationContext
+from sim_panel.outcomes.base import EvaluationContext, OutcomeConfig
 from sim_panel.outcomes.specs import FieldSpec, QuestionnaireSpec
 
 
@@ -11,6 +11,7 @@ def render_evaluation_prompt(
     ctx: EvaluationContext,
     questionnaire: QuestionnaireSpec,
     include_features: bool = True,
+    outcome_cfg: Optional[OutcomeConfig] = None,
     prompting_strategy: str = "persona",
 ) -> str:
     """
@@ -33,9 +34,8 @@ def render_evaluation_prompt(
         lines.append("You are evaluating a product. Read the product information and answer the questionnaire.")
         lines.append("")
         lines.append("## Example Evaluation")
-        lines.append("For a product like 'Classic Lager - A traditional pale lager with crisp finish',")
-        lines.append("a respondent might answer:")
-        ex = {"outcomes": {"rating": 7, "purchase_intent": "maybe"}, "traces": {"rationale": "Solid traditional beer, nothing exceptional but reliable."}}
+        intro, ex = _build_few_shot_evaluation_example(questionnaire=questionnaire, outcome_cfg=outcome_cfg)
+        lines.append(intro)
         lines.append(_pretty_json(ex))
     else:
         lines.append("You are evaluating a product. Read the product information and answer the questionnaire.")
@@ -98,6 +98,35 @@ def _render_field(fs: FieldSpec) -> list[str]:
     return parts
 
 
+def _build_few_shot_evaluation_example(
+    *,
+    questionnaire: QuestionnaireSpec,
+    outcome_cfg: Optional[OutcomeConfig],
+) -> tuple[str, Dict[str, Any]]:
+    custom = getattr(outcome_cfg, "custom_few_shot_example", None) if outcome_cfg is not None else None
+    if isinstance(custom, dict):
+        intro = str(custom.get("intro", "")).strip() or "Example of a valid evaluation response:"
+        response = custom.get("response")
+        if isinstance(response, dict):
+            ex = _normalize_few_shot_evaluation_response(response)
+            return intro, ex
+
+    ex = {
+        "outcomes": _example_outcomes(questionnaire),
+        "traces": _example_traces(questionnaire),
+    }
+    return "Example of a valid evaluation response:", ex
+
+
+def _normalize_few_shot_evaluation_response(response: Dict[str, Any]) -> Dict[str, Any]:
+    outcomes = response.get("outcomes")
+    traces = response.get("traces")
+    return {
+        "outcomes": outcomes if isinstance(outcomes, dict) else {},
+        "traces": traces if isinstance(traces, dict) else {},
+    }
+
+
 def _example_json(q: QuestionnaireSpec, include_reasoning: bool = False) -> str:
     outcomes: Dict[str, Any] = {}
     for fs in q.outcome_fields:
@@ -111,6 +140,20 @@ def _example_json(q: QuestionnaireSpec, include_reasoning: bool = False) -> str:
 
     payload = {"outcomes": outcomes, "traces": traces}
     return _pretty_json(payload)
+
+
+def _example_outcomes(q: QuestionnaireSpec) -> Dict[str, Any]:
+    outcomes: Dict[str, Any] = {}
+    for fs in q.outcome_fields:
+        outcomes[fs.name] = _example_value(fs)
+    return outcomes
+
+
+def _example_traces(q: QuestionnaireSpec) -> Dict[str, Any]:
+    traces: Dict[str, Any] = {}
+    for fs in q.trace_fields:
+        traces[fs.name] = _example_value(fs)
+    return traces
 
 
 def _example_value(fs: FieldSpec) -> Any:

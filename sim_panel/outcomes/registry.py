@@ -52,6 +52,10 @@ def outcome_config_from_yaml_dict(d: Mapping[str, Any]) -> OutcomeConfig:
     if not isinstance(include_raw_text, bool):
         raise ValueError("outcomes_model.include_raw_text must be bool.")
 
+    custom_few_shot_example = model_cfg.get("custom_few_shot_example", None)
+    if custom_few_shot_example is not None and not isinstance(custom_few_shot_example, Mapping):
+        raise ValueError("outcomes_model.custom_few_shot_example must be a mapping if provided.")
+
     questionnaire_cfg = d.get("questionnaire", d)  # allow top-level questionnaire dict directly
     if not isinstance(questionnaire_cfg, Mapping):
         raise ValueError("questionnaire must be a mapping.")
@@ -63,4 +67,5 @@ def outcome_config_from_yaml_dict(d: Mapping[str, Any]) -> OutcomeConfig:
         temperature=float(temperature),
         max_tokens=max_tokens,
         include_raw_text=include_raw_text,
+        custom_few_shot_example=custom_few_shot_example,
     )
