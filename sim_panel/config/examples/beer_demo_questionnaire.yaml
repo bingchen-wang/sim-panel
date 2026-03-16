@@ -100,7 +100,7 @@ questionnaire:
         question: "Overall, how much do you like this beer?"
         instruction: "Pick one integer."
         required: true
-        analyze_type: ordinal
+        analysis_type: "ordinal"
         choice_order: [1, 2, 3, 4, 5]
 
       purchase_intent:
@@ -109,7 +109,7 @@ questionnaire:
         question: "How likely are you to purchase this beer in the next 30 days?"
         instruction: "Choose one option."
         required: true
-        analyze_type: ordinal
+        analysis_type: "ordinal"
         choice_order: ["no", "maybe", "yes"]
 
       bitterness:
@@ -118,7 +118,7 @@ questionnaire:
         question: "How bitter does this beer taste to you?"
         instruction: "Pick one integer (1=not bitter, 5=very bitter)."
         required: false
-        analyze_type: ordinal
+        analysis_type: "ordinal"
         choice_order: [1, 2, 3, 4, 5]
 
       usefulness:
@@ -127,7 +127,7 @@ questionnaire:
         question: "Do you find the product information useful?"
         instruction: "Choose one option."
         required: true
-        analyze_type: binary
+        analysis_type: "binary"
 
       drinking_habit:
         type: categorical
@@ -135,7 +135,7 @@ questionnaire:
         question: "Do you consider yourself a frequent drinker (at least once per week)?"
         instruction: "Choose one option."
         required: true
-        analyze_type: binary
+        analysis_type: "binary"
 
   traces:
     fields:

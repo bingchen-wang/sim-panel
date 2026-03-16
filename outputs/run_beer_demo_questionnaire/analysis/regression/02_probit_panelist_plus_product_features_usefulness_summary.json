@@ -1,0 +1,18 @@
+{
+  "family": "probit",
+  "design": "panelist_plus_product_features",
+  "outcome_field": "usefulness",
+  "n_obs": 60,
+  "n_features": 28,
+  "covariance_type": "cluster",
+  "n_unique_panelist_clusters": 20,
+  "n_unique_product_clusters": 9,
+  "n_dropped_constant_columns": 0,
+  "n_dropped_duplicate_columns": 1,
+  "n_dropped_rank_deficient_columns": 16,
+  "aic": 56.0000000000001,
+  "bic": 114.64164774221891,
+  "log_likelihood": -4.840572387365743e-14,
+  "pseudo_r2": Infinity,
+  "accuracy": 1.0
+}

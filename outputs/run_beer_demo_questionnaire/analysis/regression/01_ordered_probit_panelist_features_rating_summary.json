@@ -1,0 +1,16 @@
+{
+  "family": "ordered_probit",
+  "design": "panelist_features",
+  "outcome_field": "rating",
+  "n_obs": 60,
+  "n_features": 19,
+  "covariance_type": "cluster",
+  "n_unique_panelist_clusters": 20,
+  "n_unique_product_clusters": 9,
+  "n_dropped_constant_columns": 0,
+  "n_dropped_duplicate_columns": 1,
+  "n_dropped_rank_deficient_columns": 4,
+  "aic": 157.96361119581334,
+  "bic": 204.03919156469954,
+  "log_likelihood": -56.98180559790667
+}

@@ -1,0 +1,14 @@
+{
+  "mean_pairwise_panelist_distance": 0.8299319727891157,
+  "mean_pairwise_product_distance": 0.9388888888888888,
+  "mean_within_panelist_product_variance": 0.47777777777777775,
+  "mean_within_product_panelist_variance": 0.49618318756073865,
+  "n_observed": 60,
+  "n_panelists_observed": 20,
+  "n_products_observed": 9,
+  "outcome_field": "rating",
+  "overall_variance": 0.8030555555555555,
+  "panelist_mean_variance": 0.3252777777777778,
+  "product_mean_variance": 0.3286117409926933,
+  "supported": true
+}

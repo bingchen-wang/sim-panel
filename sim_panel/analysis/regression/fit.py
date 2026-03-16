@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
+
+import numpy as np
+import pandas as pd
 
 from sim_panel.analysis.types import RunAnalysis
 from sim_panel.outcomes.specs import QuestionnaireSpec
@@ -43,6 +46,36 @@ def run_regression(
         options=options,
     )
 
+    # ------------------------------------------------------------------
+    # Pre-fit check: skip degenerate targets that cannot be estimated.
+    # ------------------------------------------------------------------
+    skip_reason = _check_degenerate_target(
+        y=processed_design.y,
+        family=spec.family,
+        outcome_field=spec.outcome_field,
+    )
+    if skip_reason is not None:
+        return RegressionResult(
+            family=spec.family,
+            design=spec.design,
+            outcome_field=spec.outcome_field,
+            n_obs=int(len(processed_design.y)),
+            n_features=int(processed_design.X.shape[1]),
+            coefficients={},
+            intercept=None,
+            metrics={},
+            coefficient_table=[],
+            metadata={
+                "converged": False,
+                "skip_reason": skip_reason,
+                **{
+                    k: v
+                    for k, v in processed_design.metadata.items()
+                    if k != "converged"
+                },
+            },
+        )
+
     cov_type, cov_kwds = resolve_covariance_settings(
         options=options,
         metadata=processed_design.metadata,
@@ -64,17 +97,34 @@ def run_regression(
                 "covariance_type='cluster_two_way' is currently supported for OLS only."
             )
 
-        result = fit_discrete_model(
-            family=spec.family,
-            X=processed_design.X,
-            y=processed_design.y,
-            outcome=outcome,
-            design=spec.design,
-            outcome_field=spec.outcome_field,
-            options=options,
-            cov_type=cov_type,
-            cov_kwds=cov_kwds,
-        )
+        try:
+            result = fit_discrete_model(
+                family=spec.family,
+                X=processed_design.X,
+                y=processed_design.y,
+                outcome=outcome,
+                design=spec.design,
+                outcome_field=spec.outcome_field,
+                options=options,
+                cov_type=cov_type,
+                cov_kwds=cov_kwds,
+            )
+        except (np.linalg.LinAlgError, ValueError) as exc:
+            result = RegressionResult(
+                family=spec.family,
+                design=spec.design,
+                outcome_field=spec.outcome_field,
+                n_obs=int(len(processed_design.y)),
+                n_features=int(processed_design.X.shape[1]),
+                coefficients={},
+                intercept=None,
+                metrics={},
+                coefficient_table=[],
+                metadata={
+                    "converged": False,
+                    "fit_error": f"{type(exc).__name__}: {exc}",
+                },
+            )
 
     result.metadata.update(
         {
@@ -88,6 +138,53 @@ def run_regression(
         }
     )
     return result
+
+def _check_degenerate_target(
+    *,
+    y: Any,
+    family: str,
+    outcome_field: str,
+) -> Optional[str]:
+    """
+    Return a skip reason string if the target is degenerate, else None.
+
+    Family-specific checks:
+
+    - All families: zero observations or constant target (n_unique <= 1).
+    - logit / probit: need both binary classes present (n_unique >= 2).
+    - multinomial_logit: need at least 2 observed classes.
+    - ordered_logit / ordered_probit: need at least 2 observed ordered categories.
+
+    Notes
+    -----
+    This helper is intentionally conservative about truly degenerate targets,
+    but it should not encode stronger model-policy choices than necessary.
+    In particular, ordered models are only skipped when fewer than 2 observed
+    categories remain after preprocessing; they are not required to use every
+    declared category in `choice_order`.
+    """
+    y_series = pd.Series(y)
+    y_nonmissing = y_series.dropna()
+
+    if len(y_nonmissing) == 0:
+        return "no observations after preprocessing"
+
+    unique_values = pd.unique(y_nonmissing)
+
+    n_unique = len(unique_values)
+
+    if n_unique <= 1:
+        if family in {"logit", "probit"}:
+            return (
+                f"binary target '{outcome_field}' has only one class present; "
+                f"logit/probit requires observations in both classes"
+            )
+        return (
+            f"target '{outcome_field}' has no variation "
+            f"({n_unique} unique value(s)); model cannot be estimated"
+        )
+
+    return None
 
 
 def resolve_covariance_settings(

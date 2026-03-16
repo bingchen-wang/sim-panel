@@ -1,0 +1,20 @@
+{
+  "avg_choice_set_size": 10.0,
+  "avg_dropped_size": 1.25,
+  "avg_executed_size": 3.0,
+  "avg_requested_size": 4.25,
+  "drop_rate_over_requested": 0.29411764705882354,
+  "empty_execution_rate": 0.0,
+  "empty_request_rate": 0.0,
+  "executed_product_entropy": 2.846241906045432,
+  "executed_product_normalized_entropy_full_support": 0.8568041886354979,
+  "executed_product_normalized_entropy_observed_support": 0.8978893521929998,
+  "n_selection_rows": 20,
+  "n_unique_executed_products": 9,
+  "n_unique_requested_products": 10,
+  "request_to_execution_ratio": 0.7058823529411765,
+  "requested_product_entropy": 3.0248215773887344,
+  "requested_product_normalized_entropy_full_support": 0.9105620263256474,
+  "requested_product_normalized_entropy_observed_support": 0.9105620263256474,
+  "support_size_allowed": 10
+}

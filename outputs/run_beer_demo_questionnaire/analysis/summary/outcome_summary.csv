@@ -1,0 +1,6 @@
+field_name,n_evaluation_rows,type,n_observed,n_missing,summary__n,summary__mean,summary__min,summary__max,summary__value_counts,summary__n_unique,summary__top_values
+bitterness,60,int,60,0,60,2.65,2,4,"{""2"": 29, ""3"": 23, ""4"": 8}",,
+drinking_habit,60,categorical,60,0,60,,,,"{""no"": 5, ""yes"": 55}",2,"[[""yes"", 55], [""no"", 5]]"
+purchase_intent,60,categorical,60,0,60,,,,"{""maybe"": 37, ""no"": 8, ""yes"": 15}",3,"[[""maybe"", 37], [""yes"", 15], [""no"", 8]]"
+rating,60,int,60,0,60,2.783333333333333,1,4,"{""1"": 3, ""2"": 23, ""3"": 18, ""4"": 16}",,
+usefulness,60,categorical,60,0,60,,,,"{""yes"": 60}",1,"[[""yes"", 60]]"

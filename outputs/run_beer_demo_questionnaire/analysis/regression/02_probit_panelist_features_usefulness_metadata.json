@@ -1,0 +1,20 @@
+{
+  "family": "probit",
+  "design": "panelist_features",
+  "outcome_field": "usefulness",
+  "covariance_type": null,
+  "model_class": null,
+  "converged": false,
+  "n_unique_panelist_clusters": 20,
+  "n_unique_product_clusters": 9,
+  "dropped_constant_columns": [],
+  "dropped_duplicate_columns": [
+    "panelist.income_bracket_30-60k"
+  ],
+  "dropped_rank_deficient_columns": [
+    "panelist.income_bracket_60-100k",
+    "panelist.income_bracket_<30k",
+    "panelist.region_South",
+    "panelist.region_West"
+  ]
+}
