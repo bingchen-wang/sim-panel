@@ -1,7 +1,11 @@
 # SIM-PANEL — Synthetic Panelists for Product Reviews
 
 <p align="center">
-  <img src="assets/logo.svg" alt="sim-panel logo" width="500"/>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="./assets/logo-light.svg">
+    <img src="./assets/logo-light.svg" alt="sim-panel logo" width="500">
+  </picture>
 </p>
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
