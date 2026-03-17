@@ -73,7 +73,7 @@ class RegressionOptions:
     max_iter: int = 200
     include_inference: bool = True
     confidence_level: float = 0.95
-    covariance_type: CovarianceType = "nonrobust"
+    covariance_type: CovarianceType = "cluster_two_way"
 
 
 @dataclass(frozen=True)

@@ -59,7 +59,7 @@ regression:
     max_iter: 200
     include_inference: true
     confidence_level: 0.95
-    covariance_type: cluster_panelist
+    covariance_type: cluster_two_way
 
   specs:
     - family: ordered_logit
