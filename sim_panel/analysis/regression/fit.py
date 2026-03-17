@@ -93,8 +93,18 @@ def run_regression(
         )
     else:
         if options.covariance_type == "cluster_two_way":
-            raise ValueError(
-                "covariance_type='cluster_two_way' is currently supported for OLS only."
+            options = RegressionOptions(
+                drop_missing=options.drop_missing,
+                standardize_numeric=options.standardize_numeric,
+                add_intercept=options.add_intercept,
+                max_iter=options.max_iter,
+                include_inference=options.include_inference,
+                confidence_level=options.confidence_level,
+                covariance_type="cluster_panelist",
+            )
+            cov_type, cov_kwds = resolve_covariance_settings(
+                options=options,
+                metadata=processed_design.metadata,
             )
 
         try:
@@ -226,22 +236,19 @@ def resolve_covariance_settings(
         panelist_groups = metadata.get("panelist_ids")
         product_groups = metadata.get("product_ids")
 
-        if not isinstance(panelist_groups, list) or len(panelist_groups) == 0:
-            raise ValueError(
-                "cluster_two_way covariance requested, but no panelist_ids are available."
-            )
-        if not isinstance(product_groups, list) or len(product_groups) == 0:
-            raise ValueError(
-                "cluster_two_way covariance requested, but no product_ids are available."
-            )
-        if len(panelist_groups) != len(product_groups):
-            raise ValueError(
-                "cluster_two_way covariance requires aligned panelist_ids and product_ids."
-            )
+        has_panelists = isinstance(panelist_groups, list) and len(panelist_groups) > 0
+        has_products = isinstance(product_groups, list) and len(product_groups) > 0
+        aligned = has_panelists and has_products and len(panelist_groups) == len(product_groups)
 
-        return "cluster_two_way", {
-            "groups_panelist": panelist_groups,
-            "groups_product": product_groups,
-        }
+        if aligned:
+            return "cluster_two_way", {
+                "groups_panelist": panelist_groups,
+                "groups_product": product_groups,
+            }
+
+        # Fallback: cluster_panelist if available, else nonrobust.
+        if has_panelists:
+            return "cluster", {"groups": panelist_groups}
+        return None, None
 
     raise ValueError(f"Unsupported covariance_type '{cov}'.")
