@@ -7,6 +7,7 @@
 This companion manual documents the architecture of `sim-panel` for developers. It explains the functions, interfaces, and design boundaries of each module, and shows how the main components fit together into the end-to-end generation pipeline.
 
 ## Table of Contents
+## Table of Contents
 - [Backends overview](#backends-overview)
   - [Core contract](#core-contract)
   - [Messages](#messages)
@@ -16,6 +17,7 @@ This companion manual documents the architecture of `sim-panel` for developers. 
   - [Included Backends](#included-backends)
     - [ollama](#ollama)
     - [server](#server)
+
 - [Panelists overview](#panelists-overview)
   - [What it is](#what-it-is)
   - [Key concepts](#key-concepts)
@@ -23,6 +25,7 @@ This companion manual documents the architecture of `sim-panel` for developers. 
   - [Typical usage](#typical-usage)
     - [Load panelists](#load-panelists)
     - [Enrich `persona_text` from `attributes` (one-time)](#enrich-persona_text-from-attributes-one-time)
+
 - [Products overview](#products-overview)
   - [What it is](#what-it-is-1)
   - [Key concepts](#key-concepts-1)
@@ -32,11 +35,13 @@ This companion manual documents the architecture of `sim-panel` for developers. 
     - [Get what the panelist should see](#get-what-the-panelist-should-see)
     - [Enrich `display_text` for a campaign (one-time)](#enrich-display_text-for-a-campaign-one-time)
   - [Design invariants](#design-invariants)
+
 - [Schema overview](#schema-overview)
   - [What the schema represents](#what-the-schema-represents)
   - [Key fields (v0.1.0)](#key-fields-v010)
   - [Versioning & registry](#versioning--registry)
   - [Validation utilities](#validation-utilities)
+
 - [Policies overview](#policies-overview)
   - [Core contract](#core-contract-1)
   - [Policy behaviors](#policy-behaviors)
@@ -44,6 +49,7 @@ This companion manual documents the architecture of `sim-panel` for developers. 
     - [Manual (`policies/manual.py`)](#manual-policiesmanualpy)
     - [Self-selection (`policies/self_selection.py`)](#self-selection-policiesself_selectionpy)
   - [Generator–Policy boundary (important)](#generatorpolicy-boundary-important)
+
 - [Outcomes overview](#outcomes-overview)
   - [Core concepts](#core-concepts)
     - [QuestionnaireSpec (YAML-defined)](#questionnairespec-yaml-defined)
@@ -54,6 +60,7 @@ This companion manual documents the architecture of `sim-panel` for developers. 
     - [DeterministicOutcomeModel](#deterministicoutcomemodel)
     - [LLMOutcomeModel](#llmoutcomemodel)
   - [Registry](#registry)
+
 - [Decisions overview](#decisions-overview)
   - [Selection prompt and parsing](#selection-prompt-and-parsing)
     - [SelectionContext](#selectioncontext)
@@ -63,12 +70,14 @@ This companion manual documents the architecture of `sim-panel` for developers. 
     - [Parsing](#parsing)
   - [Generator-side operational rules (execution budget)](#generator-side-operational-rules-execution-budget)
   - [Event semantics](#event-semantics)
+
 - [Generators overview](#generators-overview)
   - [Core entrypoint](#core-entrypoint)
   - [High-level flow (per run)](#high-level-flow-per-run)
   - [Determinism](#determinism)
   - [GeneratorConfig highlights](#generatorconfig-highlights)
   - [Boundary rules (important)](#boundary-rules-important)
+
 - [IO overview](#io-overview)
   - [Atomic writes](#atomic-writes)
   - [JSONL utilities](#jsonl-utilities)
@@ -77,6 +86,7 @@ This companion manual documents the architecture of `sim-panel` for developers. 
   - [Data dictionary artifact (`data_dictionary.json`)](#data-dictionary-artifact-data_dictionaryjson)
   - [CSV output (optional)](#csv-output-optional)
   - [Paths helpers](#paths-helpers)
+
 - [Config overview](#config-overview)
   - [Entry points](#entry-points)
   - [Required YAML structure](#required-yaml-structure)
@@ -85,6 +95,110 @@ This companion manual documents the architecture of `sim-panel` for developers. 
   - [Runtime object construction](#runtime-object-construction)
   - [Output_dir](#output_dir)
   - [Fail-fast philosophy](#fail-fast-philosophy)
+
+- [Analysis overview](#analysis-overview)
+  - [Design principles](#design-principles)
+  - [Current module structure](#current-module-structure)
+  - [Main files](#main-files-2)
+    - [`types.py`](#typespy)
+    - [`config.py`](#configpy)
+    - [`metadata.py`](#metadatapy)
+    - [`resolve.py`](#resolvepy)
+    - [`run.py`](#runpy)
+    - [`runner.py`](#runnerpy)
+    - [`tables.py`](#tablespy)
+  - [Metrics overview](#metrics-overview)
+    - [`metrics/utils.py`](#metricsutilspy)
+    - [`metrics/quality.py`](#metricsqualitypy)
+    - [`metrics/diversity.py`](#metricsdiversitypy)
+    - [`metrics/persona.py`](#metricspersonapy)
+    - [`metrics/selection.py`](#metricsselectionpy)
+  - [Typical analysis flow](#typical-analysis-flow)
+  - [Example YAML shape](#example-yaml-shape)
+  - [Plot generation](#plot-generation)
+  - [Design principles](#design-principles-1)
+  - [Current plot families](#current-plot-families)
+    - [Outcome distributions](#outcome-distributions)
+    - [Panelist summary plots](#panelist-summary-plots)
+    - [Product summary plots](#product-summary-plots)
+    - [Selection concentration plots](#selection-concentration-plots)
+  - [Current module structure](#current-module-structure-1)
+  - [Plot YAML configuration](#plot-yaml-configuration)
+  - [Meaning of the current options](#meaning-of-the-current-options)
+    - [`outcome_distributions`](#outcome_distributions)
+    - [`panelist_summary`](#panelist_summary)
+    - [`product_summary`](#product_summary)
+    - [`selection_concentration`](#selection_concentration)
+  - [Current artifact behavior](#current-artifact-behavior)
+  - [Current limitations](#current-limitations)
+  - [Artifact writing and report generation](#artifact-writing-and-report-generation)
+    - [`summary/`](#summary)
+    - [`metrics/`](#metrics)
+    - [`plots/`](#plots)
+    - [`report/`](#report)
+  - [Export controls](#export-controls)
+  - [Current scope of markdown reporting](#current-scope-of-markdown-reporting)
+  - [Regression analysis module](#regression-analysis-module)
+    - [What it does](#what-it-does)
+    - [Design philosophy](#design-philosophy)
+    - [Main components](#main-components)
+    - [Supported regression designs](#supported-regression-designs)
+    - [Collinearity handling](#collinearity-handling)
+    - [Covariance / inference options](#covariance--inference-options)
+    - [Output artifacts](#output-artifacts)
+    - [Interpretation caution](#interpretation-caution)
+  - [Analysis YAML: regression-enabled example](#analysis-yaml-regression-enabled-example)
+  - [Available options by section](#available-options-by-section)
+    - [`load`](#load)
+    - [`summaries`](#summaries)
+    - [`metrics`](#metrics-1)
+    - [`plots.outcome_distributions`](#plotsoutcome_distributions)
+    - [`plots.panelist_summary` and `plots.product_summary`](#plotspanelist_summary-and-plotsproduct_summary)
+    - [`plots.selection_concentration`](#plotsselection_concentration)
+    - [`regression.options`](#regressionoptions)
+    - [`regression.specs[*].family`](#regressionspecsfamily)
+    - [`regression.specs[*].design`](#regressionspecsdesign)
+    - [`regression.specs[*].outcome_field`](#regressionspecsoutcome_field)
+    - [`export`](#export)
+  - [Current scope and limitations](#current-scope-and-limitations)
+
+- [Sources overview](#sources-overview)
+  - [Design goals](#design-goals)
+  - [Current structure](#current-structure)
+  - [Core abstractions](#core-abstractions)
+    - [`SourceConfig`](#sourceconfig)
+    - [`SourceRawBundle`](#sourcerawbundle)
+    - [`SourceExportBundle`](#sourceexportbundle)
+    - [`SourceStats`](#sourcestats)
+  - [Base interface and registry](#base-interface-and-registry)
+    - [`BaseSource`](#basesource)
+    - [Source registry](#source-registry)
+  - [Amazon Reviews’23 source](#amazon-reviews23-source)
+    - [Import model](#import-model)
+    - [Product identity](#product-identity)
+    - [Product mapping](#product-mapping)
+    - [Persona mapping](#persona-mapping)
+    - [Event mapping](#event-mapping)
+    - [Outcomes](#outcomes-1)
+    - [Traces](#traces)
+    - [Time index `t`](#time-index-t)
+  - [Import modes](#import-modes)
+    - [`in_memory`](#in_memory)
+    - [`streaming`](#streaming)
+    - [Streaming support by time index mode](#streaming-support-by-time-index-mode)
+  - [Loader / transform / export / streaming separation](#loader--transform--export--streaming-separation)
+    - [`loader.py`](#loaderpy)
+    - [`transform.py`](#transformpy)
+    - [`export.py`](#exportpy)
+    - [`streaming.py`](#streamingpy)
+  - [CLI integration](#cli-integration)
+  - [Example configuration](#example-configuration)
+  - [Progress reporting and large-file imports](#progress-reporting-and-large-file-imports)
+  - [Current limitations](#current-limitations-1)
+    - [In-memory path does not scale to very large categories](#in-memory-path-does-not-scale-to-very-large-categories)
+    - [Streaming path does not yet support `global_sequence`](#streaming-path-does-not-yet-support-global_sequence)
+    - [Independent caps can reduce metadata overlap](#independent-caps-can-reduce-metadata-overlap)
+    - [Event provenance remains schema-constrained](#event-provenance-remains-schema-constrained)
 
 
 ## Backends overview
@@ -2287,8 +2401,8 @@ source:
   name: amazon_reviews_2023
   output_dir: outputs/import_amazon_grocery_full
 
-  reviews_path: data/raw/amazon/Grocery_and_Gourmet_Food.jsonl.gz
-  metadata_path: data/raw/amazon/meta_Grocery_and_Gourmet_Food.jsonl.gz
+  reviews_path: data/raw/amazon/Grocery_and_Gourmet_Food.jsonl
+  metadata_path: data/raw/amazon/meta_Grocery_and_Gourmet_Food.jsonl
   category: Grocery_and_Gourmet_Food
 
   import_mode: streaming
@@ -2349,37 +2463,3 @@ This is expected under capped independent prefixes and does not indicate a bug i
 
 #### Event provenance remains schema-constrained
 Because event rows must validate against the shared event schema, they cannot carry arbitrary top-level source metadata fields. The source importer therefore keeps event rows schema-pure and places only selected child-level provenance under `traces["source"]`.
-
-### Testing status
-
-The Amazon source transform is covered by dedicated tests for:
-- typed `ProductRecord` / `PersonaRecord` construction
-- `display_name` and `display_text` behavior
-- fallback from product description to features
-- product deduplication by `parent_asin`
-- event feature copying from canonical records
-- trace-field mapping
-- `t` assignment under `panelist_sequence`
-- event dropping when metadata match is required
-- persona thresholding via `min_reviews_per_persona`
-- validation of emitted event rows against `EventV0_1_0`
-
-The streaming path should additionally be tested for:
-- parity with in-memory output on small fixtures
-- correct shard-based persona reconstruction
-- correct `panelist_sequence` behavior
-- rejection of unsupported `global_sequence` in streaming mode
-- bounded-memory execution assumptions at the integration level
-
-### Future directions
-
-Likely next steps for the `sources/` module include:
-
-- adding a dedicated streaming-result type distinct from `SourceExportBundle`
-- extending the source registry with additional real-world datasets
-- adding more source-level validation and inspection commands
-- improving import-level metadata summaries
-- adding source-specific profiling and parity-test utilities
-- optionally implementing an external-sort path for streaming `global_sequence`
-
-The long-run role of `sources/` is to serve as the bridge between external observational data and internal sim-panel artifacts, allowing the repo to support both purely synthetic pipelines and data-backed simulation scaffolds within a common engineering framework.
