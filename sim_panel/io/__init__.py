@@ -22,6 +22,9 @@ from sim_panel.io.dictionary import (
     build_data_dictionary,
     write_data_dictionary_json,
 )
+from sim_panel.io.json_io import (
+    write_json_dict,
+)
 from sim_panel.io.csv_io import (
     write_csv_rows,
 )
@@ -46,6 +49,7 @@ __all__ = [
     "write_metadata_json",
     "build_data_dictionary",
     "write_data_dictionary_json",
+    "write_json_dict",
     "write_csv_rows",
     "ManualSchedule",
     "load_manual_schedule",

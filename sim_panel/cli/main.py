@@ -4,6 +4,7 @@ import argparse
 import sys
 import json
 import os
+from pathlib import Path
 from dataclasses import asdict, is_dataclass, replace
 from typing import Any, Dict, List, Optional
 
@@ -40,6 +41,7 @@ from sim_panel.analysis import (
     run_comparison,
 )
 
+from sim_panel.sources.build import build_source_from_yaml_dict
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = _build_parser()
@@ -57,6 +59,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return _cmd_analyze(args)
     if args.command == "compare":
         return _cmd_compare(args)
+    if args.command == "import":
+        return _cmd_import(args)
 
     parser.print_help()
     return 2
@@ -127,6 +131,15 @@ def _build_parser() -> argparse.ArgumentParser:
     # compare
     cmp = sub.add_parser("compare", help="Compare metrics across multiple runs/conditions")
     cmp.add_argument("--config", required=True, help="Path to comparison YAML config")
+
+    # import
+    imp = sub.add_parser("import", help="Import an external source dataset from a YAML config")
+    imp.add_argument("--config", required=True, help="Path to source import YAML config")
+    imp.add_argument(
+        "--output-dir",
+        default=None,
+        help="Output directory (overrides source.output_dir in YAML if provided)",
+    )
 
     return p
 
@@ -392,6 +405,48 @@ def _cmd_compare(args: argparse.Namespace) -> int:
         mean_s = f"{mean:.3f}" if mean is not None else "-"
         std_s = f"{std:.3f}" if std is not None else "-"
         print(f"  {label}: mean={mean_s}, std={std_s}, n={n}")
+
+    return 0
+
+
+def _cmd_import(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    d = load_yaml(args.config)
+    source = build_source_from_yaml_dict(d)
+
+    if args.output_dir is not None:
+        source.config.output_dir = Path(args.output_dir)
+
+    out_dir = source.config.output_dir
+    if out_dir is None:
+        raise ValueError(
+            "No output directory provided. Set source.output_dir in YAML or pass --output-dir."
+        )
+
+    ensure_dir(str(out_dir))
+
+    print("[import] loading source rows...", file=sys.stderr, flush=True)
+    raw = source.load_raw()
+
+    print("[import] transforming into sim-panel artifacts...", file=sys.stderr, flush=True)
+    bundle = source.transform(raw)
+
+    print("[import] writing output files...", file=sys.stderr, flush=True)
+    source.export(bundle, output_dir=out_dir)
+
+    print(f"Wrote source import to: {out_dir}")
+    print(
+        f"Counts: events={bundle.stats.n_events}, "
+        f"products={bundle.stats.n_products}, "
+        f"personas={bundle.stats.n_personas}"
+    )
+
+    if bundle.stats.n_reviews_missing_product_metadata:
+        print(
+            f"Warning: {bundle.stats.n_reviews_missing_product_metadata} review rows "
+            f"did not match product metadata."
+        )
 
     return 0
 

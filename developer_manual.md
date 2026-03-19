@@ -1902,3 +1902,396 @@ The following component(s) are planned but not yet implemented:
 - benchmark-style comparison against real observed data
 
 These later component(s) should build on the current single-run summary/metric contracts rather than bypassing them.
+
+## Sources overview
+
+The `sources/` module provides a structured import layer for bringing **external observational datasets** into the internal `sim-panel` artifact format. Its purpose is not to generate synthetic events directly, but to convert raw third-party data into canonical `products.jsonl`, `personas.jsonl`, and `events.jsonl` files that can later be inspected, validated, sampled, or used as substrates for downstream simulation.
+
+This module is designed for cases where the project needs to ingest real-world data sources, preserve useful provenance, and project them into the same internal contracts used elsewhere in the repository.
+
+### Design goals
+
+The `sources/` layer is built around the following principles:
+
+- **Separation of concerns**: raw ingestion, canonical transformation, and export are handled in separate stages.
+- **Canonical internal artifacts**: imported data should end up in the same durable on-disk formats used by the rest of the repo.
+- **Schema alignment**: imported event rows must conform to the `sim-panel` event schema rather than carry arbitrary source-specific fields.
+- **Typed records where appropriate**: imported products and personas are represented using `ProductRecord` and `PersonaRecord`, rather than ad hoc dictionaries.
+- **Source-specific flexibility with shared infrastructure**: each source can define its own config and transformation logic while conforming to a common interface.
+- **Reproducible import runs**: imports emit metadata, statistics, and a data dictionary alongside the main JSONL artifacts.
+
+### Current structure
+
+The module currently follows this structure:
+
+```text
+sim_panel/
+  sources/
+    __init__.py
+    base.py
+    build.py
+    registry.py
+    types.py
+
+    amazon_reviews_2023/
+      __init__.py
+      config.py
+      loader.py
+      transform.py
+      export.py
+      source.py
+```
+
+### Core abstractions
+
+#### `SourceConfig`
+A generic base configuration object for source importers. Source-specific config classes inherit from this and add source-local fields.
+
+Typical responsibilities:
+- source name
+- output directory
+- seed or source-specific parameters
+- any source-specific import options
+
+#### `SourceRawBundle`
+A lightweight container holding raw source artifacts before transformation.
+
+For the current design, it contains:
+- `reviews`: raw review-side rows
+- `products`: raw product-side rows
+- `aux`: additional import context
+
+This bundle is intentionally generic because raw source structures differ across datasets.
+
+#### `SourceExportBundle`
+A canonical container produced by a source transform. It represents the fully transformed output of the import pipeline.
+
+Current fields:
+- `events: List[dict]`
+- `products: List[ProductRecord]`
+- `personas: List[PersonaRecord]`
+- `metadata: dict`
+- `data_dictionary: dict`
+- `stats: SourceStats`
+
+This design reflects a deliberate long-run choice:
+- events remain schema-valid row dictionaries
+- products and personas travel as typed record objects end-to-end
+
+#### `SourceStats`
+A small structured summary of the import process, used to write `stats.json`.
+
+Current statistics include:
+- number of raw reviews loaded
+- number of raw metadata rows loaded
+- number of exported events
+- number of exported products
+- number of exported personas
+- number of review rows missing matched product metadata
+- source-specific extras
+
+### Base interface and registry
+
+#### `BaseSource`
+All sources inherit from `BaseSource`, which defines the shared interface:
+
+- `validate_config()`
+- `load_raw()`
+- `transform(raw)`
+- `run()`
+
+Concrete sources may also implement:
+- `export(bundle, output_dir=None)`
+
+The intended execution flow is:
+
+1. validate config
+2. load raw source artifacts
+3. transform into canonical internal artifacts
+4. export to disk
+
+#### Source registry
+The registry provides name-to-source resolution so CLI and higher-level orchestration code do not need to hard-code source classes directly.
+
+This allows a YAML config to declare a source like:
+
+```yaml
+source:
+  name: amazon_reviews_2023
+  ...
+```
+
+and then use a builder to instantiate the correct source object.
+
+### Amazon Reviews’23 source
+
+The first implemented source is `amazon_reviews_2023`, which imports Amazon Reviews’23 category files into sim-panel artifacts.
+
+#### Import model
+
+The importer is intentionally asymmetric:
+
+- `products.jsonl` is built from the **item metadata** file
+- `personas.jsonl` is derived from **user review histories**
+- `events.jsonl` is built from **review rows**
+
+This reflects the structure of the underlying dataset:
+- review rows carry `user_id`, `asin`, `parent_asin`, timestamps, ratings, review title/text, purchase flags, and related review-level information
+- metadata rows carry product title, description, features, category, store, price, ratings, details, and related product-level information
+
+#### Product identity
+For this source, canonical `product_id` is the metadata-side `parent_asin`.
+
+This is a deliberate modeling choice:
+- imported products are metadata-backed product-family entities
+- review-side child `asin` is preserved in event traces rather than promoted to canonical product identity
+- this avoids collisions in `products.jsonl` while still retaining child-level provenance in imported events
+
+#### Product mapping
+Imported products are emitted as `ProductRecord` objects.
+
+Current mapping:
+- `product_id` <- `parent_asin`
+- `display_name` <- metadata `title`
+- `display_text` <- metadata `description`
+- fallback: `features` if `description` is missing and fallback is enabled
+- `attributes` <- compact structured metadata such as category, store, price, ratings, categories, and details
+- `meta` <- optional raw source-side product payload
+- `provenance` <- source lineage and import timestamp
+
+#### Persona mapping
+Imported personas are emitted as `PersonaRecord` objects.
+
+Current mapping:
+- `persona_id` <- `user_id`
+- `persona_text` <- `None` for source-derived personas
+- `attributes` <- summary statistics derived from review history
+
+Current persona summaries include:
+- number of reviews
+- number of unique products reviewed
+- number of verified-purchase reviews
+- mean rating when available
+
+These personas are deliberately **spec-like** rather than prompt-like. They are intended to serve as canonical source-derived entities, not as ready-made runtime prompts.
+
+#### Event mapping
+Imported events are emitted as schema-valid evaluation rows compatible with `EventV0_1_0`.
+
+Current event design:
+- `event_type = "evaluation"`
+- `policy = "manual"`
+- `panelist_id` <- `user_id`
+- `product_id` <- `parent_asin`
+- `product_display` <- imported product `display_text` or `display_name`
+- `panelist_features` <- `PersonaRecord.attributes`
+- `product_features` <- `ProductRecord.attributes`
+- `outcomes` <- observed review-side outcomes
+- `traces` <- mapped review text fields plus source-side child provenance
+- `selection_id = None`
+
+The event schema forbids unknown top-level fields, so source-specific review provenance is not stored in a top-level `meta` field. Instead, the importer keeps events schema-pure and places structured child-level source provenance under `traces["source"]` when needed.
+
+#### Outcomes
+For Amazon review imports, the current importer keeps the following review-side quantities in `outcomes`:
+- `rating`
+- `verified_purchase`
+- `helpful_vote`
+
+This is a deliberate design choice: although not all of these are preference measures in the narrowest sense, they are event-level observed outcomes attached to the review and may be useful downstream.
+
+#### Traces
+The event `traces` field is a single JSON dictionary, aligned with the main event schema and questionnaire design elsewhere in the repository.
+
+Review text fields are mapped into `traces` via `trace_field_map`, for example:
+
+```yaml
+trace_field_map:
+  title: review_title
+  text: review_text
+```
+
+This produces traces like:
+
+```json
+{
+  "review_title": "Loved it",
+  "review_text": "Tasty and fresh.",
+  "source": {
+    "child_asin": "B00EXAMPLE",
+    "timestamp": 1680300000000
+  }
+}
+```
+
+This preserves the distinction between:
+- textual traces for human interpretation
+- structured source provenance
+
+#### Time index `t`
+Imported event rows must satisfy the main event schema, where `t` is an integer period index.
+
+For Amazon imports, `t` is derived from source timestamps according to `time_index_mode`.
+
+Currently supported modes:
+- `panelist_sequence`: assign `t = 0, 1, 2, ...` within each user after sorting by timestamp
+- `global_sequence`: assign a single global event order
+- `raw_timestamp`: use raw integer timestamp directly
+
+The recommended default is `panelist_sequence`, since it aligns best with the panel-style schema and preserves within-user temporal ordering without collapsing `t` into wall-clock time.
+
+### Loader / transform / export separation
+
+#### `loader.py`
+Responsible only for raw ingestion:
+- open raw review and metadata files
+- read JSONL / JSONL.GZ
+- return raw rows in a `SourceRawBundle`
+
+It performs no canonical mapping.
+
+#### `transform.py`
+Responsible for the main source-specific projection:
+- build `ProductRecord` objects
+- build `PersonaRecord` objects
+- build schema-valid event rows
+- derive time indices
+- map traces
+- compute import statistics
+- assemble `SourceExportBundle`
+
+This is the main semantic core of the source.
+
+#### `export.py`
+Responsible only for writing transformed artifacts to disk using the shared `io/` layer.
+
+Current outputs:
+- `events.jsonl`
+- `products.jsonl`
+- `personas.jsonl`
+- `metadata.json`
+- `data_dictionary.json`
+- `stats.json`
+
+Because the source bundle stores typed product/persona records, export uses the record-aware IO helpers:
+- `write_product_records_jsonl(...)`
+- `write_persona_records_jsonl(...)`
+
+while events remain row dictionaries written via:
+- `write_jsonl_rows(...)`
+
+### CLI integration
+
+The source layer is integrated into the top-level CLI via the `import` command.
+
+Typical usage:
+
+```bash
+sim-panel import --config sim_panel/config/examples/import_amazon_reviews_2023.yaml
+```
+
+The command performs:
+1. YAML loading
+2. source construction from config
+3. raw loading
+4. transformation into canonical artifacts
+5. export to disk
+
+This keeps source import aligned with the style of the existing CLI commands such as `generate`, `validate`, and `sample`.
+
+### Example configuration
+
+A typical source-import YAML looks like:
+
+```yaml
+source:
+  name: amazon_reviews_2023
+  output_dir: outputs/import_amazon_grocery_full
+
+  reviews_path: data/raw/amazon/Grocery_and_Gourmet_Food.jsonl.gz
+  metadata_path: data/raw/amazon/meta_Grocery_and_Gourmet_Food.jsonl.gz
+  category: Grocery_and_Gourmet_Food
+
+  require_metadata_match_for_events: false
+
+  trace_field_map:
+    title: review_title
+    text: review_text
+
+  time_index_mode: panelist_sequence
+
+  product_description_fallback_to_features: true
+  include_raw_product_meta: true
+  include_raw_review_meta: false
+
+  min_reviews_per_persona: 1
+  max_reviews: null
+  max_metadata_rows: null
+```
+
+### Progress bars and large-file imports
+
+The importer supports progress reporting via `tqdm_wrap(...)` during:
+- review loading
+- metadata loading
+- product construction
+- persona grouping/building
+- event construction
+
+This is especially useful because source files can be large. In practice, some Amazon category files may be on the order of:
+- review data: several GB
+- metadata: around 1 GB
+
+For smoke tests, capped runs can be used via:
+- `max_reviews`
+- `max_metadata_rows`
+
+For full imports, progress feedback is important both for user experience and for diagnosing slow stages.
+
+### Current limitations
+
+The current implementation is functionally correct and already supports full imports, but several limitations remain.
+
+#### Memory usage
+The importer currently materializes raw reviews and metadata in memory before transformation. This is acceptable for a reference implementation and for medium-scale imports on high-memory machines, but it is not the desired final design for very large categories.
+
+A future update should add a low-memory / streaming path, likely by:
+- streaming reviews instead of fully materializing them
+- separating persona summarization from event emission
+- reducing intermediate duplication
+
+#### Metadata truncation and overlap
+If both reviews and metadata are independently capped using `max_reviews` and `max_metadata_rows`, the loaded slices may not overlap well on `parent_asin`. This can produce many review rows that do not match loaded metadata rows, even when the full dataset contains the relevant metadata.
+
+This is expected under capped independent prefixes and does not indicate a bug in the importer.
+
+#### Event provenance constraints
+Because event rows must validate against the shared event schema, they cannot carry arbitrary top-level source metadata fields. The source importer therefore keeps event rows schema-pure and places only selected child-level provenance under `traces["source"]`.
+
+### Testing status
+
+The Amazon source transform is covered by dedicated tests for:
+- typed `ProductRecord` / `PersonaRecord` construction
+- `display_name` and `display_text` behavior
+- fallback from product description to features
+- product deduplication by `parent_asin`
+- event feature copying from canonical records
+- trace-field mapping
+- `t` assignment under `panelist_sequence`
+- event dropping when metadata match is required
+- persona thresholding via `min_reviews_per_persona`
+- validation of emitted event rows against `EventV0_1_0`
+
+This establishes the current importer as a solid reference implementation for future source modules.
+
+### Future directions
+
+Likely next steps for the `sources/` module include:
+
+- adding a streaming / low-memory import path
+- extending the source registry with additional real-world datasets
+- optionally adding source-side validation or inspection commands
+- improving import-level metadata summaries
+- adding source-specific comparison or profiling utilities
+
+The long-run role of `sources/` is to serve as the bridge between external observational data and internal sim-panel artifacts, allowing the repo to support both purely synthetic pipelines and data-backed simulation scaffolds within a common engineering framework.

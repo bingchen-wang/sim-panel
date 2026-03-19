@@ -1,6 +1,6 @@
 # Example run config: beer demo + self_selection policy (LLM-based selection + evaluation)
 
-output_dir: outputs/run_beer_demo_questionnaire
+output_dir: /home/bd58/data/bd58/sim-panel/run_beer_demo_large_self_selection
 
 backend:
   name: ollama
@@ -17,7 +17,7 @@ generator:
   validate_on_finish: true
   max_errors: 50
   event_namespace: "sim_panel.v0"
-  max_workers: 2
+  max_workers: 16
 
 panelists:
   source: data/personas_beer_demo_large.jsonl
@@ -100,8 +100,6 @@ questionnaire:
         question: "Overall, how much do you like this beer?"
         instruction: "Pick one integer."
         required: true
-        analyze_type: ordinal
-        choice_order: [1, 2, 3, 4, 5]
 
       purchase_intent:
         type: categorical
@@ -109,8 +107,6 @@ questionnaire:
         question: "How likely are you to purchase this beer in the next 30 days?"
         instruction: "Choose one option."
         required: true
-        analyze_type: ordinal
-        choice_order: ["no", "maybe", "yes"]
 
       bitterness:
         type: int
@@ -118,24 +114,6 @@ questionnaire:
         question: "How bitter does this beer taste to you?"
         instruction: "Pick one integer (1=not bitter, 5=very bitter)."
         required: false
-        analyze_type: ordinal
-        choice_order: [1, 2, 3, 4, 5]
-
-      usefulness:
-        type: categorical
-        choices: ["no", "yes"]
-        question: "Do you find the product information useful?"
-        instruction: "Choose one option."
-        required: true
-        analyze_type: binary
-
-      drinking_habit:
-        type: categorical
-        choices: ["no", "yes"]
-        question: "Do you consider yourself a frequent drinker (at least once per week)?"
-        instruction: "Choose one option."
-        required: true
-        analyze_type: binary
 
   traces:
     fields:
