@@ -211,3 +211,8 @@ __marimo__/
 
 # Raw external source data
 data/raw/
+
+# Outputs
+outputs/import_amazon_grocery_full/
+outputs/import_amazon_grocery_full/**
+# outputs/   # can do this later if needed

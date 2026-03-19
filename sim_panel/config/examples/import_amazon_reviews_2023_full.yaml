@@ -6,6 +6,8 @@ source:
   metadata_path: data/raw/amazon/meta_Grocery_and_Gourmet_Food.jsonl
   category: Grocery_and_Gourmet_Food
 
+  import_mode: streaming
+
   require_metadata_match_for_events: false
 
   trace_field_map:

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-
 from pathlib import Path
+
 from sim_panel.sources.types import SourceConfig, SourceExportBundle, SourceRawBundle
 
 
@@ -13,8 +13,9 @@ class BaseSource(ABC):
     A source is responsible for:
     1. validating its configuration,
     2. loading raw source artifacts,
-    3. transforming them into canonical internal records, and
-    4. optionally exporting them to disk.
+    3. transforming them into canonical internal records,
+    4. exporting materialized bundles when applicable, and
+    5. optionally supporting a streaming import/export path.
     """
 
     name: str
@@ -34,6 +35,8 @@ class BaseSource(ABC):
     def load_raw(self) -> SourceRawBundle:
         """
         Load raw source artifacts from disk or other local inputs.
+
+        Sources that only support streaming may raise a RuntimeError here.
         """
         raise NotImplementedError
 
@@ -41,15 +44,36 @@ class BaseSource(ABC):
     def transform(self, raw: SourceRawBundle) -> SourceExportBundle:
         """
         Convert raw source artifacts into canonical internal records.
+
+        Sources that only support streaming may raise a RuntimeError here.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def export(
+        self,
+        bundle: SourceExportBundle,
+        output_dir: Path | None = None,
+    ) -> None:
+        """
+        Write a materialized source export bundle to disk.
         """
         raise NotImplementedError
 
     def run(self) -> SourceExportBundle:
         """
-        End-to-end source import: validate, load, transform.
+        End-to-end in-memory source import: validate, load, transform.
         """
         raw = self.load_raw()
         return self.transform(raw)
-    
-    def export_streaming(self, output_dir: Path | None = None) -> None:
-        raise NotImplementedError(f"{self.__class__.__name__} does not implement streaming import.")
+
+    def export_streaming(self, output_dir: Path | None = None) -> SourceExportBundle:
+        """
+        Streaming source import/export path.
+
+        Implementations may write artifacts incrementally to disk and return a
+        lightweight bundle carrying metadata and stats only.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement streaming import."
+        )

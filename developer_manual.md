@@ -1905,20 +1905,21 @@ These later component(s) should build on the current single-run summary/metric c
 
 ## Sources overview
 
-The `sources/` module provides a structured import layer for bringing **external observational datasets** into the internal `sim-panel` artifact format. Its purpose is not to generate synthetic events directly, but to convert raw third-party data into canonical `products.jsonl`, `personas.jsonl`, and `events.jsonl` files that can later be inspected, validated, sampled, or used as substrates for downstream simulation.
+The `sources/` module provides a structured import layer for bringing **external observational datasets** into the internal `sim-panel` artifact format. Its role is not to generate synthetic events directly, but to convert raw third-party data into canonical `products.jsonl`, `personas.jsonl`, and `events.jsonl` artifacts that can later be inspected, validated, sampled, analyzed, or used as substrates for downstream simulation.
 
-This module is designed for cases where the project needs to ingest real-world data sources, preserve useful provenance, and project them into the same internal contracts used elsewhere in the repository.
+This module is intended for cases where the project needs to ingest real-world data, preserve useful provenance, and project it into the same internal contracts used elsewhere in the repository.
 
 ### Design goals
 
 The `sources/` layer is built around the following principles:
 
-- **Separation of concerns**: raw ingestion, canonical transformation, and export are handled in separate stages.
+- **Separation of concerns**: raw ingestion, canonical transformation, and export are handled in distinct stages.
 - **Canonical internal artifacts**: imported data should end up in the same durable on-disk formats used by the rest of the repo.
-- **Schema alignment**: imported event rows must conform to the `sim-panel` event schema rather than carry arbitrary source-specific fields.
-- **Typed records where appropriate**: imported products and personas are represented using `ProductRecord` and `PersonaRecord`, rather than ad hoc dictionaries.
+- **Schema alignment**: imported event rows must conform to the shared `sim-panel` event schema rather than carry arbitrary source-specific top-level fields.
+- **Typed records where appropriate**: imported products and personas are represented using `ProductRecord` and `PersonaRecord`, not ad hoc dictionaries.
 - **Source-specific flexibility with shared infrastructure**: each source can define its own config and transformation logic while conforming to a common interface.
 - **Reproducible import runs**: imports emit metadata, statistics, and a data dictionary alongside the main JSONL artifacts.
+- **Execution-strategy flexibility**: the same source adaptor may support both an in-memory path and a streaming / low-memory path, controlled by configuration rather than by changing the source semantics.
 
 ### Current structure
 
@@ -1939,6 +1940,7 @@ sim_panel/
       loader.py
       transform.py
       export.py
+      streaming.py
       source.py
 ```
 
@@ -1951,7 +1953,8 @@ Typical responsibilities:
 - source name
 - output directory
 - seed or source-specific parameters
-- any source-specific import options
+- source-specific import options
+- execution strategy options such as import mode
 
 #### `SourceRawBundle`
 A lightweight container holding raw source artifacts before transformation.
@@ -1963,8 +1966,10 @@ For the current design, it contains:
 
 This bundle is intentionally generic because raw source structures differ across datasets.
 
+`SourceRawBundle` is primarily used by **in-memory** import paths. Streaming paths may bypass it entirely.
+
 #### `SourceExportBundle`
-A canonical container produced by a source transform. It represents the fully transformed output of the import pipeline.
+A canonical container produced by an in-memory source transform.
 
 Current fields:
 - `events: List[dict]`
@@ -1978,12 +1983,14 @@ This design reflects a deliberate long-run choice:
 - events remain schema-valid row dictionaries
 - products and personas travel as typed record objects end-to-end
 
+For streaming import paths, large artifacts are written directly to disk rather than fully materialized in memory. In that case, a source may return a **lightweight** `SourceExportBundle` carrying only metadata, dictionary, and stats, with `events`, `products`, and `personas` left empty.
+
 #### `SourceStats`
 A small structured summary of the import process, used to write `stats.json`.
 
 Current statistics include:
-- number of raw reviews loaded
-- number of raw metadata rows loaded
+- number of raw reviews loaded or streamed
+- number of raw metadata rows loaded or streamed
 - number of exported events
 - number of exported products
 - number of exported personas
@@ -1993,22 +2000,31 @@ Current statistics include:
 ### Base interface and registry
 
 #### `BaseSource`
-All sources inherit from `BaseSource`, which defines the shared interface:
+All sources inherit from `BaseSource`, which defines the shared interface.
 
+Core methods:
 - `validate_config()`
 - `load_raw()`
 - `transform(raw)`
 - `run()`
-
-Concrete sources may also implement:
 - `export(bundle, output_dir=None)`
+- `export_streaming(output_dir=None)`
 
-The intended execution flow is:
+The intended execution patterns are:
 
+**In-memory path**
 1. validate config
 2. load raw source artifacts
 3. transform into canonical internal artifacts
 4. export to disk
+
+**Streaming path**
+1. validate config
+2. stream and process source artifacts incrementally
+3. write canonical artifacts directly to disk
+4. return lightweight metadata / stats
+
+This split is deliberate: `import_mode` should change the **execution strategy**, not the semantic meaning of the imported artifacts.
 
 #### Source registry
 The registry provides name-to-source resolution so CLI and higher-level orchestration code do not need to hard-code source classes directly.
@@ -2073,7 +2089,7 @@ Current persona summaries include:
 - number of verified-purchase reviews
 - mean rating when available
 
-These personas are deliberately **spec-like** rather than prompt-like. They are intended to serve as canonical source-derived entities, not as ready-made runtime prompts.
+These personas are deliberately **spec-like** rather than prompt-like. They are canonical source-derived entities, not ready-made runtime prompts.
 
 #### Event mapping
 Imported events are emitted as schema-valid evaluation rows compatible with `EventV0_1_0`.
@@ -2084,13 +2100,13 @@ Current event design:
 - `panelist_id` <- `user_id`
 - `product_id` <- `parent_asin`
 - `product_display` <- imported product `display_text` or `display_name`
-- `panelist_features` <- `PersonaRecord.attributes`
+- `panelist_features` <- `PersonaRecord.attributes` when a persona is emitted
 - `product_features` <- `ProductRecord.attributes`
 - `outcomes` <- observed review-side outcomes
 - `traces` <- mapped review text fields plus source-side child provenance
 - `selection_id = None`
 
-The event schema forbids unknown top-level fields, so source-specific review provenance is not stored in a top-level `meta` field. Instead, the importer keeps events schema-pure and places structured child-level source provenance under `traces["source"]` when needed.
+The event schema forbids unknown top-level fields, so source-specific provenance is not stored in a top-level `meta` field. Instead, the importer keeps events schema-pure and places structured child-level provenance under `traces["source"]` when needed.
 
 #### Outcomes
 For Amazon review imports, the current importer keeps the following review-side quantities in `outcomes`:
@@ -2134,24 +2150,72 @@ Imported event rows must satisfy the main event schema, where `t` is an integer 
 For Amazon imports, `t` is derived from source timestamps according to `time_index_mode`.
 
 Currently supported modes:
-- `panelist_sequence`: assign `t = 0, 1, 2, ...` within each user after sorting by timestamp
+- `panelist_sequence`: assign `t = 0, 1, 2, ...` within each user after chronological sorting of that user’s reviews
 - `global_sequence`: assign a single global event order
 - `raw_timestamp`: use raw integer timestamp directly
 
 The recommended default is `panelist_sequence`, since it aligns best with the panel-style schema and preserves within-user temporal ordering without collapsing `t` into wall-clock time.
 
-### Loader / transform / export separation
+### Import modes
+
+The Amazon source supports an execution-strategy switch:
+
+```python
+import_mode: Literal["in_memory", "streaming"] = "in_memory"
+```
+
+This field controls **how** the importer runs, not **what** it means.
+
+#### `in_memory`
+The in-memory path:
+- loads review rows and metadata rows into a `SourceRawBundle`
+- builds products, personas, and events in memory
+- assembles a full `SourceExportBundle`
+- writes artifacts to disk via `export.py`
+
+This path is straightforward and remains the reference implementation for transformation semantics.
+
+#### `streaming`
+The streaming path is designed for large categories where fully materializing all reviews, personas, and events in memory is not practical.
+
+Current streaming design:
+- stream metadata rows and write `products.jsonl` incrementally
+- retain a product lookup in memory
+- stream review rows once and shard them to temporary files by `user_id`
+- process each shard independently
+- derive personas shard-by-shard and write `personas.jsonl` incrementally
+- emit `events.jsonl` incrementally without building a giant in-memory event list
+
+This keeps memory bounded while preserving the same canonical on-disk output contracts.
+
+#### Streaming support by time index mode
+Streaming mode currently supports:
+- `panelist_sequence`
+- `raw_timestamp`
+
+Streaming mode does **not yet** support:
+- `global_sequence`
+
+This is deliberate. Exact `global_sequence` semantics require a corpus-wide sort, which is better treated as a separate external-sort problem rather than hidden behind a nominally low-memory path.
+
+### Loader / transform / export / streaming separation
 
 #### `loader.py`
-Responsible only for raw ingestion:
+Responsible for raw ingestion helpers:
 - open raw review and metadata files
 - read JSONL / JSONL.GZ
-- return raw rows in a `SourceRawBundle`
+- provide either eager loading or row iterators
+
+For in-memory mode, it returns a `SourceRawBundle`.
+
+For streaming mode, it exposes iterators such as:
+- review-row iterators
+- metadata-row iterators
 
 It performs no canonical mapping.
 
 #### `transform.py`
-Responsible for the main source-specific projection:
+Responsible for the main source-specific projection logic used by the in-memory path:
 - build `ProductRecord` objects
 - build `PersonaRecord` objects
 - build schema-valid event rows
@@ -2160,7 +2224,9 @@ Responsible for the main source-specific projection:
 - compute import statistics
 - assemble `SourceExportBundle`
 
-This is the main semantic core of the source.
+This remains the semantic core of the source.
+
+The file also contains reusable row-level helpers that are shared by both in-memory and streaming execution paths.
 
 #### `export.py`
 Responsible only for writing transformed artifacts to disk using the shared `io/` layer.
@@ -2180,6 +2246,19 @@ Because the source bundle stores typed product/persona records, export uses the 
 while events remain row dictionaries written via:
 - `write_jsonl_rows(...)`
 
+#### `streaming.py`
+Responsible for the low-memory execution path.
+
+Typical responsibilities:
+- stream metadata and build product lookup
+- write product records incrementally
+- shard review rows by `user_id`
+- process shards independently
+- derive personas and events without full-corpus materialization
+- write final metadata, data dictionary, and stats
+
+This module should be viewed as an **execution orchestration layer**. It reuses the same row-level semantic mapping logic as `transform.py`, but changes the memory strategy.
+
 ### CLI integration
 
 The source layer is integrated into the top-level CLI via the `import` command.
@@ -2193,11 +2272,11 @@ sim-panel import --config sim_panel/config/examples/import_amazon_reviews_2023.y
 The command performs:
 1. YAML loading
 2. source construction from config
-3. raw loading
-4. transformation into canonical artifacts
-5. export to disk
+3. dispatch by `import_mode`
+4. either in-memory import or streaming import
+5. export / finalize on-disk artifacts
 
-This keeps source import aligned with the style of the existing CLI commands such as `generate`, `validate`, and `sample`.
+This keeps source import aligned with the style of the existing CLI commands such as `generate`, `validate`, and `sample`, while allowing large-source imports to bypass the in-memory bundle path.
 
 ### Example configuration
 
@@ -2211,6 +2290,8 @@ source:
   reviews_path: data/raw/amazon/Grocery_and_Gourmet_Food.jsonl.gz
   metadata_path: data/raw/amazon/meta_Grocery_and_Gourmet_Food.jsonl.gz
   category: Grocery_and_Gourmet_Food
+
+  import_mode: streaming
 
   require_metadata_match_for_events: false
 
@@ -2229,20 +2310,23 @@ source:
   max_metadata_rows: null
 ```
 
-### Progress bars and large-file imports
+### Progress reporting and large-file imports
 
-The importer supports progress reporting via `tqdm_wrap(...)` during:
+The importer supports progress reporting via `tqdm_wrap(...)`.
+
+In-memory mode may report progress during:
 - review loading
 - metadata loading
 - product construction
-- persona grouping/building
+- persona grouping / building
 - event construction
 
-This is especially useful because source files can be large. In practice, some Amazon category files may be on the order of:
-- review data: several GB
-- metadata: around 1 GB
+Streaming mode may report progress during:
+- metadata streaming
+- review sharding
+- shard processing
 
-For smoke tests, capped runs can be used via:
+This is especially important because source files can be large. For smoke tests, capped runs can be used via:
 - `max_reviews`
 - `max_metadata_rows`
 
@@ -2250,22 +2334,20 @@ For full imports, progress feedback is important both for user experience and fo
 
 ### Current limitations
 
-The current implementation is functionally correct and already supports full imports, but several limitations remain.
+The current implementation is already functional and supports both reference-scale and larger-scale imports, but several limitations remain.
 
-#### Memory usage
-The importer currently materializes raw reviews and metadata in memory before transformation. This is acceptable for a reference implementation and for medium-scale imports on high-memory machines, but it is not the desired final design for very large categories.
+#### In-memory path does not scale to very large categories
+The in-memory path materializes raw reviews and metadata before transformation, and also constructs large persona and event collections in memory. This is fine for smaller runs and as a semantic reference path, but can fail on large categories.
 
-A future update should add a low-memory / streaming path, likely by:
-- streaming reviews instead of fully materializing them
-- separating persona summarization from event emission
-- reducing intermediate duplication
+#### Streaming path does not yet support `global_sequence`
+Exact global ordering requires a corpus-wide sort. This is intentionally out of scope for the initial streaming path.
 
-#### Metadata truncation and overlap
-If both reviews and metadata are independently capped using `max_reviews` and `max_metadata_rows`, the loaded slices may not overlap well on `parent_asin`. This can produce many review rows that do not match loaded metadata rows, even when the full dataset contains the relevant metadata.
+#### Independent caps can reduce metadata overlap
+If reviews and metadata are independently capped using `max_reviews` and `max_metadata_rows`, the loaded slices may not overlap well on `parent_asin`. This can produce many review rows that do not match loaded metadata rows, even when the full dataset contains the relevant metadata.
 
 This is expected under capped independent prefixes and does not indicate a bug in the importer.
 
-#### Event provenance constraints
+#### Event provenance remains schema-constrained
 Because event rows must validate against the shared event schema, they cannot carry arbitrary top-level source metadata fields. The source importer therefore keeps event rows schema-pure and places only selected child-level provenance under `traces["source"]`.
 
 ### Testing status
@@ -2282,16 +2364,22 @@ The Amazon source transform is covered by dedicated tests for:
 - persona thresholding via `min_reviews_per_persona`
 - validation of emitted event rows against `EventV0_1_0`
 
-This establishes the current importer as a solid reference implementation for future source modules.
+The streaming path should additionally be tested for:
+- parity with in-memory output on small fixtures
+- correct shard-based persona reconstruction
+- correct `panelist_sequence` behavior
+- rejection of unsupported `global_sequence` in streaming mode
+- bounded-memory execution assumptions at the integration level
 
 ### Future directions
 
 Likely next steps for the `sources/` module include:
 
-- adding a streaming / low-memory import path
+- adding a dedicated streaming-result type distinct from `SourceExportBundle`
 - extending the source registry with additional real-world datasets
-- optionally adding source-side validation or inspection commands
+- adding more source-level validation and inspection commands
 - improving import-level metadata summaries
-- adding source-specific comparison or profiling utilities
+- adding source-specific profiling and parity-test utilities
+- optionally implementing an external-sort path for streaming `global_sequence`
 
 The long-run role of `sources/` is to serve as the bridge between external observational data and internal sim-panel artifacts, allowing the repo to support both purely synthetic pipelines and data-backed simulation scaffolds within a common engineering framework.

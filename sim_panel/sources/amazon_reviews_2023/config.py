@@ -20,14 +20,14 @@ class AmazonReviews2023Config(SourceConfig):
     - all rows in the provided metadata file are exported as products
     - textual review content is mapped into the single event-level `traces` dict
     - `t` is derived from timestamps, defaulting to within-panelist sequence order
-    
-    Time index construction for imported events.
 
-    - panelist_sequence: default and recommended. Assigns t = 0, 1, ... within each
-    panelist after chronological sorting of that panelist's reviews.
-    - raw_timestamp: uses the source timestamp directly.
-    - global_sequence: assigns a single corpus-wide chronological sequence; mainly
-    for diagnostics and not recommended as the default panel representation.   
+    Time index modes
+    ----------------
+    - panelist_sequence: default and recommended; assigns t = 0, 1, ... within each
+      panelist after chronological sorting of that panelist's reviews
+    - raw_timestamp: uses the source timestamp directly
+    - global_sequence: assigns a corpus-wide chronological sequence; supported in
+      in-memory mode but not yet in streaming mode
     """
 
     reviews_path: Path = Path()

@@ -25,6 +25,36 @@ def _iter_jsonl(path: Path) -> Iterator[Mapping[str, Any]]:
             yield json.loads(line)
 
 
+def iter_amazon_reviews_rows(config: AmazonReviews2023Config) -> Iterator[Mapping[str, Any]]:
+    """
+    Stream raw review rows from the Amazon Reviews'23 review file.
+    """
+    review_iter = tqdm_wrap(
+        _iter_jsonl(config.reviews_path),
+        desc="Stream reviews",
+        enabled=True,
+    )
+    for idx, row in enumerate(review_iter):
+        yield row
+        if config.max_reviews is not None and idx + 1 >= config.max_reviews:
+            break
+
+
+def iter_amazon_metadata_rows(config: AmazonReviews2023Config) -> Iterator[Mapping[str, Any]]:
+    """
+    Stream raw metadata rows from the Amazon Reviews'23 metadata file.
+    """
+    product_iter = tqdm_wrap(
+        _iter_jsonl(config.metadata_path),
+        desc="Stream metadata",
+        enabled=True,
+    )
+    for idx, row in enumerate(product_iter):
+        yield row
+        if config.max_metadata_rows is not None and idx + 1 >= config.max_metadata_rows:
+            break
+
+
 def load_amazon_reviews_2023_raw(config: AmazonReviews2023Config) -> SourceRawBundle:
     """
     Load raw review rows and raw metadata rows from Amazon Reviews'23.

@@ -4,7 +4,7 @@ import argparse
 import sys
 import json
 import os
-from pathlib import Path
+
 from dataclasses import asdict, is_dataclass, replace
 from typing import Any, Dict, List, Optional
 
@@ -410,8 +410,6 @@ def _cmd_compare(args: argparse.Namespace) -> int:
 
 
 def _cmd_import(args: argparse.Namespace) -> int:
-    from pathlib import Path
-
     d = load_yaml(args.config)
     source = build_source_from_yaml_dict(d)
 
@@ -426,14 +424,22 @@ def _cmd_import(args: argparse.Namespace) -> int:
 
     ensure_dir(str(out_dir))
 
-    print("[import] loading source rows...", file=sys.stderr, flush=True)
-    raw = source.load_raw()
+    import_mode = getattr(source.config, "import_mode", "in_memory")
 
-    print("[import] transforming into sim-panel artifacts...", file=sys.stderr, flush=True)
-    bundle = source.transform(raw)
+    if import_mode == "streaming":
+        print("[import] running source import in streaming mode...", file=sys.stderr, flush=True)
+        bundle = source.export_streaming(output_dir=out_dir)
+    elif import_mode == "in_memory":
+        print("[import] loading source rows...", file=sys.stderr, flush=True)
+        raw = source.load_raw()
 
-    print("[import] writing output files...", file=sys.stderr, flush=True)
-    source.export(bundle, output_dir=out_dir)
+        print("[import] transforming into sim-panel artifacts...", file=sys.stderr, flush=True)
+        bundle = source.transform(raw)
+
+        print("[import] writing output files...", file=sys.stderr, flush=True)
+        source.export(bundle, output_dir=out_dir)
+    else:
+        raise ValueError(f"Unsupported import_mode: {import_mode!r}")
 
     print(f"Wrote source import to: {out_dir}")
     print(
@@ -449,7 +455,6 @@ def _cmd_import(args: argparse.Namespace) -> int:
         )
 
     return 0
-
 
 def _resolve_save_preview(source_path: Any, save: Any) -> Optional[str]:
     if not isinstance(source_path, str):
