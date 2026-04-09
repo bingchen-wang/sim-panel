@@ -200,6 +200,11 @@ This companion manual documents the architecture of `sim-panel` for developers. 
     - [Independent caps can reduce metadata overlap](#independent-caps-can-reduce-metadata-overlap)
     - [Event provenance remains schema-constrained](#event-provenance-remains-schema-constrained)
 
+- [Benchmarks overview](#benchmarks-overview)
+  - [What it is](#what-it-is-2)
+  - [Current benchmark subset scope](#current-benchmark-subset-scope)
+  - [Current benchmark outputs](#current-benchmark-outputs)
+  - [Design notes and planned extensions](#design-notes-and-planned-extensions)
 
 ## Backends overview
 `sim_panel/backends/` provides a single, provider-agnostic interface for anything that looks like “send messages → get text back”. Everything else in the repo (`panelists/products/generators`) should depend on this interface, not on vendor-specific SDKs.
@@ -2463,3 +2468,83 @@ This is expected under capped independent prefixes and does not indicate a bug i
 
 #### Event provenance remains schema-constrained
 Because event rows must validate against the shared event schema, they cannot carry arbitrary top-level source metadata fields. The source importer therefore keeps event rows schema-pure and places only selected child-level provenance under `traces["source"]`.
+
+## Benchmarks overview
+
+### What it is
+
+`sim_panel/benchmarks/` provides lightweight utilities for freezing benchmark-ready subsets from already imported real-data artifacts.
+
+In the current Phase 2 path, the benchmark module is intentionally narrow:
+- it reads an imported source directory, typically one produced by `sim-panel import`
+- it selects a reproducible subset of real events at the product level
+- it writes a frozen benchmark directory for downstream comparison
+
+This keeps the original full import untouched. The intended workflow is:
+
+```text
+import real data -> freeze benchmark subset -> compare synthetic runs against that reference
+```
+
+The current subset builder is streaming-first and uses a two-pass scan over `events.jsonl`:
+1. count rating-bearing events per product
+2. select eligible products reproducibly with a seed
+3. rescan and write only the selected events/products into the benchmark directory
+
+This avoids loading the full imported `events.jsonl` into memory.
+
+### Current benchmark subset scope
+
+The current subset builder is dataset-pertinent: it is designed around the imported Amazon Reviews path and assumes a default imported Amazon Reviews category as its source benchmark pool.
+
+Concretely, the current selection logic is intentionally narrow:
+- rating-focused
+- product-level eligibility based on review volume
+- reproducible seeded selection
+- no elaborate stratification in v0
+
+At present, benchmark subsetting operates over the imported dataset as a whole, for example a default imported Amazon Reviews category directory.
+
+A planned extension is to support additional filtering using product-level metadata already present in `products.jsonl`, especially:
+- subsetting by `main_category`
+- where `main_category` is stored inside product `attributes`
+
+That extension would allow finer benchmark carving within a previously imported source directory without changing the benchmark directory contract.
+
+### Current benchmark outputs
+
+The benchmark subset directory contract is currently:
+
+- `events_real.jsonl`
+- `products.jsonl`
+- `metadata.json`
+- `stats.json`
+
+The current `stats.json` is intentionally high-level. It records summary information about the subsetting event, such as:
+- number of selected products
+- number of selected events
+- number of unique panelists
+- aggregate rating histogram
+- selected-product review counts
+
+The current rating histogram is aggregate only. It should be interpreted as a quick sanity-check summary of the exported benchmark subset, not as a full per-product diagnostic report.
+
+### Design notes and planned extensions
+
+The current benchmark stats are minimal by design. They are meant to answer:
+- what subset was frozen
+- how large it is
+- whether the exported benchmark looks broadly sensible
+
+They are not yet intended to provide rich benchmark diagnostics.
+
+A planned extension is to add more granular product-level benchmark summaries, for example:
+- per-product rating histograms
+- per-product mean ratings
+- per-product event counts in a richer diagnostic format
+
+Those product-level summaries are deferred until they are directly needed by downstream comparison or reporting. For now, benchmark diagnostics remain deliberately lightweight so that the subset builder stays simple, reproducible, and fast on large imported artifacts.
+
+Implementation note:
+- `sim_panel/analysis/compare.py` remains the canonical comparison layer
+- benchmark subsets created under `sim_panel/benchmarks/` are frozen reference inputs to that layer, not a separate analysis framework

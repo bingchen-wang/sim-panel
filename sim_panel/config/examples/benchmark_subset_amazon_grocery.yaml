@@ -1,0 +1,7 @@
+benchmark_subset:
+  import_dir: outputs/import_amazon_grocery_full
+  output_dir: outputs/benchmarks/amazon_grocery_ratings_small
+  seed: 7
+  min_reviews_per_product: 50
+  max_products: 200
+  require_product_record: true

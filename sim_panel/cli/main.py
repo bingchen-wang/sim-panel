@@ -6,6 +6,7 @@ import json
 import os
 
 from dataclasses import asdict, is_dataclass, replace
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from sim_panel.config.build import build_run_from_yaml
@@ -41,6 +42,11 @@ from sim_panel.analysis import (
     run_comparison,
 )
 
+from sim_panel.benchmarks import (
+    build_benchmark_subset,
+    load_benchmark_subset_config,
+)
+
 from sim_panel.sources.build import build_source_from_yaml_dict
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -61,6 +67,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return _cmd_compare(args)
     if args.command == "import":
         return _cmd_import(args)
+    if args.command == "benchmark-subset":
+        return _cmd_benchmark_subset(args)
 
     parser.print_help()
     return 2
@@ -139,6 +147,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "--output-dir",
         default=None,
         help="Output directory (overrides source.output_dir in YAML if provided)",
+    )
+
+        # benchmark-subset
+    bmk = sub.add_parser(
+        "benchmark-subset",
+        help="Build a frozen benchmark subset directory from imported real-data artifacts",
+    )
+    bmk.add_argument(
+        "--config",
+        required=True,
+        help="Path to benchmark subset YAML config",
     )
 
     return p
@@ -453,6 +472,23 @@ def _cmd_import(args: argparse.Namespace) -> int:
             f"Warning: {bundle.stats.n_reviews_missing_product_metadata} review rows "
             f"did not match product metadata."
         )
+
+    return 0
+
+def _cmd_benchmark_subset(args: argparse.Namespace) -> int:
+    cfg = load_benchmark_subset_config(args.config)
+    result = build_benchmark_subset(cfg)
+
+    print(f"Benchmark subset written to: {cfg.output_dir}")
+
+    stats = result.get("stats", {})
+    n_products = stats.get("n_selected_products")
+    n_events = stats.get("n_selected_events")
+    n_panelists = stats.get("n_unique_panelists")
+
+    print(
+        f"Counts: products={n_products}, events={n_events}, panelists={n_panelists}"
+    )
 
     return 0
 

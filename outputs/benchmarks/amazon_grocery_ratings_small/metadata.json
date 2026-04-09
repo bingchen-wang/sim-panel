@@ -1,0 +1,26 @@
+{
+  "artifact_type": "benchmark_subset",
+  "benchmark_contract_version": "0.1.0",
+  "builder_version": "0.1.0",
+  "config": {
+    "import_dir": "outputs/import_amazon_grocery_full",
+    "max_products": 200,
+    "min_reviews_per_product": 50,
+    "output_dir": "outputs/benchmarks/amazon_grocery_ratings_small",
+    "require_product_record": true,
+    "seed": 7
+  },
+  "config_hash_sha256": "a5052d718fdf082b611b23bbf1b6d391051dde1caf98570e4d67c7a1e9e7e414",
+  "files": {
+    "events": "events.jsonl",
+    "metadata": "metadata.json",
+    "products": "products.jsonl",
+    "stats": "stats.json"
+  },
+  "seed": 7,
+  "selection_basis": "rating_event_count",
+  "selection_unit": "product",
+  "source_events_path": "/Users/bingchenwang/Documents/GitHub/sim-panel/outputs/import_amazon_grocery_full/events.jsonl",
+  "source_import_dir": "/Users/bingchenwang/Documents/GitHub/sim-panel/outputs/import_amazon_grocery_full",
+  "source_products_path": "/Users/bingchenwang/Documents/GitHub/sim-panel/outputs/import_amazon_grocery_full/products.jsonl"
+}
