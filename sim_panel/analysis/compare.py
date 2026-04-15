@@ -10,8 +10,7 @@ import json
 import math
 import os
 from collections import Counter
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Optional
 
 from sim_panel.analysis.metrics.utils import (
     extract_outcome_values,
@@ -22,100 +21,8 @@ from sim_panel.analysis.metrics.utils import (
 )
 from sim_panel.io.jsonl import read_jsonl_dicts
 from sim_panel.io.paths import ensure_dir
-
-
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
-
-@dataclass(frozen=True)
-class ConditionSpec:
-    label: str
-    model: str
-    strategy: str
-    run_dir: str
-
-
-@dataclass(frozen=True)
-class CompareConfig:
-    output_dir: str
-    outcome_field: str  # e.g. "rating"
-    conditions: List[ConditionSpec]
-    rating_scale: Optional[List[int]] = None  # e.g. [1..10]; inferred if None
-
-
-def build_compare_config_from_dict(d: Mapping[str, Any]) -> CompareConfig:
-    output_dir = d.get("output_dir")
-    if not isinstance(output_dir, str) or not output_dir:
-        raise ValueError("compare config requires 'output_dir'")
-
-    outcome_field = str(d.get("outcome_field", "rating"))
-
-    raw_conditions = d.get("conditions")
-    if not isinstance(raw_conditions, list) or not raw_conditions:
-        raise ValueError("compare config requires a non-empty 'conditions' list")
-
-    conditions: List[ConditionSpec] = []
-    for i, c in enumerate(raw_conditions):
-        if not isinstance(c, Mapping):
-            raise ValueError(f"conditions[{i}] must be a mapping")
-        conditions.append(ConditionSpec(
-            label=str(c.get("label", f"cond_{i}")),
-            model=str(c.get("model", "")),
-            strategy=str(c.get("strategy", "")),
-            run_dir=str(c["run_dir"]),
-        ))
-
-    rating_scale = d.get("rating_scale")
-    if isinstance(rating_scale, list):
-        rating_scale = [int(x) for x in rating_scale]
-
-    return CompareConfig(
-        output_dir=output_dir,
-        outcome_field=outcome_field,
-        conditions=conditions,
-        rating_scale=rating_scale,
-    )
-
-
-def build_compare_config_from_yaml(path: str) -> CompareConfig:
-    from sim_panel.config.yaml_loader import load_yaml
-    return build_compare_config_from_dict(load_yaml(path))
-
-
-# ---------------------------------------------------------------------------
-# Per-condition metrics
-# ---------------------------------------------------------------------------
-
-@dataclass
-class ConditionMetrics:
-    label: str
-    model: str
-    strategy: str
-
-    n_evaluations: int = 0
-    n_with_outcome: int = 0
-
-    rating_mean: Optional[float] = None
-    rating_std: Optional[float] = None
-    rating_median: Optional[float] = None
-
-    # Persona consistency: do different personas give different ratings?
-    panelist_mean_variance: Optional[float] = None
-    mean_pairwise_panelist_distance: Optional[float] = None
-
-    # Product differentiation: do different products get different ratings?
-    product_mean_variance: Optional[float] = None
-
-    # Distribution shape
-    rating_entropy: Optional[float] = None
-    rating_normalized_entropy: Optional[float] = None
-
-    # Raw distribution for cross-condition comparisons
-    rating_distribution: Dict[Any, int] = field(default_factory=dict)
-
-    # All numeric values for pairwise computations
-    _values: List[float] = field(default_factory=list, repr=False)
+from sim_panel.analysis.types import CompareConfig, ConditionSpec, ConditionMetrics
+from sim_panel.analysis.tables import _build_flat_table, _build_pivot_table
 
 
 def _compute_condition_metrics(
@@ -286,38 +193,6 @@ def _pairwise_rmse(
 # ---------------------------------------------------------------------------
 # Comparison tables
 # ---------------------------------------------------------------------------
-
-def _build_flat_table(metrics: List[ConditionMetrics]) -> List[Dict[str, Any]]:
-    """One row per condition with all metrics."""
-    rows: List[Dict[str, Any]] = []
-    for m in metrics:
-        rows.append({
-            "label": m.label,
-            "model": m.model,
-            "strategy": m.strategy,
-            "n_evaluations": m.n_evaluations,
-            "n_with_outcome": m.n_with_outcome,
-            "rating_mean": m.rating_mean,
-            "rating_std": m.rating_std,
-            "rating_median": m.rating_median,
-            "rating_entropy": m.rating_entropy,
-            "rating_normalized_entropy": m.rating_normalized_entropy,
-            "panelist_mean_variance": m.panelist_mean_variance,
-            "mean_pairwise_panelist_distance": m.mean_pairwise_panelist_distance,
-            "product_mean_variance": m.product_mean_variance,
-        })
-    return rows
-
-
-def _build_pivot_table(
-    metrics: List[ConditionMetrics],
-    metric_name: str,
-) -> Dict[str, Dict[str, Any]]:
-    """Build model (rows) x strategy (columns) pivot for a single metric."""
-    table: Dict[str, Dict[str, Any]] = {}
-    for m in metrics:
-        table.setdefault(m.model, {})[m.strategy] = getattr(m, metric_name, None)
-    return table
 
 
 def _build_js_divergence_matrix(

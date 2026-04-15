@@ -15,8 +15,10 @@ from sim_panel.analysis.types import (
     SummaryBarPlotConfig,
     SummaryConfig,
 )
-from sim_panel.config.yaml_loader import load_yaml
 
+from sim_panel.config.yaml_loader import load_yaml
+from sim_panel.analysis.types import CompareConfig, ConditionSpec
+from sim_panel.analysis.tables import _build_flat_table, _build_pivot_table
 
 def build_analysis_config_from_yaml(path: str) -> AnalysisConfig:
     d = load_yaml(path)
@@ -271,3 +273,40 @@ def _get_float_pair(
     ):
         raise ValueError(f"{key} must be a 2-element numeric list")
     return (float(v[0]), float(v[1]))
+
+def build_compare_config_from_dict(d: Mapping[str, Any]) -> CompareConfig:
+    output_dir = d.get("output_dir")
+    if not isinstance(output_dir, str) or not output_dir:
+        raise ValueError("compare config requires 'output_dir'")
+
+    outcome_field = str(d.get("outcome_field", "rating"))
+
+    raw_conditions = d.get("conditions")
+    if not isinstance(raw_conditions, list) or not raw_conditions:
+        raise ValueError("compare config requires a non-empty 'conditions' list")
+
+    conditions: List[ConditionSpec] = []
+    for i, c in enumerate(raw_conditions):
+        if not isinstance(c, Mapping):
+            raise ValueError(f"conditions[{i}] must be a mapping")
+        conditions.append(ConditionSpec(
+            label=str(c.get("label", f"cond_{i}")),
+            model=str(c.get("model", "")),
+            strategy=str(c.get("strategy", "")),
+            run_dir=str(c["run_dir"]),
+        ))
+
+    rating_scale = d.get("rating_scale")
+    if isinstance(rating_scale, list):
+        rating_scale = [int(x) for x in rating_scale]
+
+    return CompareConfig(
+        output_dir=output_dir,
+        outcome_field=outcome_field,
+        conditions=conditions,
+        rating_scale=rating_scale,
+    )
+
+
+def build_compare_config_from_yaml(path: str) -> CompareConfig:
+    return build_compare_config_from_dict(load_yaml(path))
