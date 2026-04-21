@@ -285,16 +285,34 @@ def build_compare_config_from_dict(d: Mapping[str, Any]) -> CompareConfig:
     if not isinstance(raw_conditions, list) or not raw_conditions:
         raise ValueError("compare config requires a non-empty 'conditions' list")
 
-    conditions: List[ConditionSpec] = []
+    conditions: list[ConditionSpec] = []
     for i, c in enumerate(raw_conditions):
         if not isinstance(c, Mapping):
             raise ValueError(f"conditions[{i}] must be a mapping")
-        conditions.append(ConditionSpec(
-            label=str(c.get("label", f"cond_{i}")),
-            model=str(c.get("model", "")),
-            strategy=str(c.get("strategy", "")),
-            run_dir=str(c["run_dir"]),
-        ))
+
+        condition_type = str(c.get("condition_type", "synthetic"))
+        if condition_type not in {"synthetic", "real"}:
+            raise ValueError(
+                f"conditions[{i}].condition_type must be 'synthetic' or 'real', "
+                f"got {condition_type!r}"
+            )
+
+        events_filename = c.get("events_filename", "events.jsonl")
+        if not isinstance(events_filename, str) or not events_filename:
+            raise ValueError(
+                f"conditions[{i}].events_filename must be a non-empty string"
+            )
+
+        conditions.append(
+            ConditionSpec(
+                label=str(c.get("label", f"cond_{i}")),
+                model=str(c.get("model", "")),
+                strategy=str(c.get("strategy", "")),
+                run_dir=str(c["run_dir"]),
+                condition_type=condition_type,
+                events_filename=events_filename,
+            )
+        )
 
     rating_scale = d.get("rating_scale")
     if isinstance(rating_scale, list):

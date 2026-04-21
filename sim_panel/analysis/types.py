@@ -180,7 +180,12 @@ class ConditionSpec:
     model: str
     strategy: str
     run_dir: str
+    condition_type: str = "synthetic"
+    events_filename: str = "events.jsonl"
 
+    @property
+    def is_real(self) -> bool:
+        return self.condition_type == "real"
 
 @dataclass(frozen=True)
 class CompareConfig:

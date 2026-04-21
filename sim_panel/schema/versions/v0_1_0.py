@@ -100,13 +100,38 @@ class EventV0_1_0(BaseModel):
                 x is not None
                 for x in (self.product_id, self.product_display, self.outcomes)
             ):
-                raise ValueError("selection event must not include product_id/product_display/outcomes/traces.")
+                raise ValueError("selection event must not include product_id/product_display/outcomes.")
 
             # sanity: selected subset must be contained in choice_set
             choice = set(self.choice_set)
-            for pid in self.selected_product_ids:
-                if pid not in choice:
-                    raise ValueError(f"selected_product_ids contains {pid!r} not in choice_set.")
+            selected = list(self.selected_product_ids)
+            if len(selected) != len(set(selected)):
+                raise ValueError("selected_product_ids must not contain duplicates.")
+            
+            traces = self.traces if isinstance(self.traces, dict) else {}
+            executed = traces.get("executed_product_ids")
+            dropped = traces.get("dropped_product_ids")
+
+            if executed is not None:
+                if not isinstance(executed, list) or any(not isinstance(x, str) for x in executed):
+                    raise ValueError("traces.executed_product_ids must be a list of strings if provided.")
+                if len(executed) != len(set(executed)):
+                    raise ValueError("traces.executed_product_ids must not contain duplicates.")
+                for pid in executed:
+                    if pid not in choice:
+                        raise ValueError(f"executed_product_ids contains {pid!r} not in choice_set.")
+
+            if dropped is not None:
+                if not isinstance(dropped, list) or any(not isinstance(x, str) for x in dropped):
+                    raise ValueError("traces.dropped_product_ids must be a list of strings if provided.")
+                if len(dropped) != len(set(dropped)):
+                    raise ValueError("traces.dropped_product_ids must not contain duplicates.")
+
+            if executed is not None and dropped is not None:
+                overlap = set(executed) & set(dropped)
+                if overlap:
+                    raise ValueError(f"executed_product_ids and dropped_product_ids overlap: {sorted(overlap)}")
+
 
             # selection_id is allowed but not required on selection rows
             return self

@@ -305,6 +305,33 @@ def _build_markdown_report(
 
     return "\n".join(lines)
 
+def _resolve_reference_condition(
+    conditions: List[ConditionSpec],
+) -> tuple[bool, Optional[ConditionSpec]]:
+    """
+    Detect whether compare is running with a real reference condition.
+
+    Returns:
+        (benchmark_mode, reference_condition)
+
+    Rules:
+    - 0 real conditions: benchmark mode off
+    - 1 real condition: benchmark mode on
+    - >1 real conditions: fail fast
+    """
+    real_conditions = [cond for cond in conditions if cond.is_real]
+
+    if not real_conditions:
+        return False, None
+
+    if len(real_conditions) == 1:
+        return True, real_conditions[0]
+
+    labels = ", ".join(cond.label for cond in real_conditions)
+    raise ValueError(
+        "compare currently supports at most one real reference condition; "
+        f"found {len(real_conditions)} real conditions: {labels}"
+    )
 
 # ---------------------------------------------------------------------------
 # Main entry point
@@ -318,11 +345,15 @@ def run_comparison(config: CompareConfig) -> Dict[str, Any]:
     """
     ensure_dir(config.output_dir)
 
+    benchmark_mode, reference_condition = _resolve_reference_condition(
+        config.conditions
+    )    
+
     all_metrics: List[ConditionMetrics] = []
     eval_rows_by_label: Dict[str, List[Dict[str, Any]]] = {}
 
     for cond in config.conditions:
-        events_path = os.path.join(cond.run_dir, "events.jsonl")
+        events_path = os.path.join(cond.run_dir, cond.events_filename)
         if not os.path.isfile(events_path):
             raise FileNotFoundError(f"Events file not found for condition '{cond.label}': {events_path}")
 
