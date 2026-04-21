@@ -4,11 +4,31 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 
-from sim_panel.schema.types import JSONObject, PolicyName, ColumnSpec, EventType
+from sim_panel.schema.types import JSONObject, PolicyName, ColumnSpec, EventType, JSONValue
 
 
 SCHEMA_VERSION = "0.1.0"
 
+def _unwrap_jsonvalue(x: Any) -> Any:
+    while isinstance(x, JSONValue):
+        x = x.root
+    return x
+
+def _unwrap_json_tree(x: Any) -> Any:
+    x = _unwrap_jsonvalue(x)
+    if isinstance(x, list):
+        return [_unwrap_json_tree(v) for v in x]
+    if isinstance(x, dict):
+        return {k: _unwrap_json_tree(v) for k, v in x.items()}
+    return x
+
+def _get_optional_list_of_str(d: Dict[str, Any], key: str) -> Optional[List[str]]:
+    value = d.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
+        raise ValueError(f"traces.{key} must be a list of strings if provided.")
+    return value
 
 class EventV0_1_0(BaseModel):
     """
@@ -56,8 +76,8 @@ class EventV0_1_0(BaseModel):
     )
     selected_product_ids: Optional[List[str]] = Field(
         default=None,
-        description="Subset of choice_set selected by panelist (selection rows; may be empty).",
-    )    
+        description="Product ids requested by the panelist (selection rows; may be empty). May differ from executed ids in traces.",
+    )
 
     # evaluation payload (evaluation rows only)
     product_id: Optional[str] = Field(
@@ -102,19 +122,19 @@ class EventV0_1_0(BaseModel):
             ):
                 raise ValueError("selection event must not include product_id/product_display/outcomes.")
 
-            # sanity: selected subset must be contained in choice_set
+            # executed ids, not raw selected ids, must be contained in choice_set
             choice = set(self.choice_set)
             selected = list(self.selected_product_ids)
             if len(selected) != len(set(selected)):
                 raise ValueError("selected_product_ids must not contain duplicates.")
             
-            traces = self.traces if isinstance(self.traces, dict) else {}
-            executed = traces.get("executed_product_ids")
-            dropped = traces.get("dropped_product_ids")
+            traces = _unwrap_json_tree(self.traces) if self.traces is not None else {}
+            if not isinstance(traces, dict):
+                traces = {}
+            executed = _get_optional_list_of_str(traces, "executed_product_ids")
+            dropped = _get_optional_list_of_str(traces, "dropped_product_ids")
 
             if executed is not None:
-                if not isinstance(executed, list) or any(not isinstance(x, str) for x in executed):
-                    raise ValueError("traces.executed_product_ids must be a list of strings if provided.")
                 if len(executed) != len(set(executed)):
                     raise ValueError("traces.executed_product_ids must not contain duplicates.")
                 for pid in executed:
@@ -122,8 +142,6 @@ class EventV0_1_0(BaseModel):
                         raise ValueError(f"executed_product_ids contains {pid!r} not in choice_set.")
 
             if dropped is not None:
-                if not isinstance(dropped, list) or any(not isinstance(x, str) for x in dropped):
-                    raise ValueError("traces.dropped_product_ids must be a list of strings if provided.")
                 if len(dropped) != len(set(dropped)):
                     raise ValueError("traces.dropped_product_ids must not contain duplicates.")
 
@@ -165,7 +183,7 @@ COLUMNS: List[ColumnSpec] = [
     {"name": "t", "dtype": "int", "required": True, "description": "Period index (0-based)."},
     {"name": "selection_id", "dtype": "string", "required": False, "description": "Links evaluation rows to selection row."},
     {"name": "choice_set", "dtype": "json", "required": False, "description": "Presented choice set (selection rows only)."},
-    {"name": "selected_product_ids", "dtype": "json", "required": False, "description": "Selected subset (selection rows only)."},
+    {"name": "selected_product_ids", "dtype": "json", "required": False, "description": "Product ids requested by the panelist (selection rows only). May differ from executed ids in traces."},
     {"name": "product_id", "dtype": "string", "required": False, "description": "Evaluated product id (evaluation rows only)."},
     {"name": "product_display", "dtype": "string", "required": False, "description": "Displayed product text (evaluation rows only)."},
     {"name": "panelist_features", "dtype": "json", "required": True, "description": "Panelist features JSON (may be {})."},
