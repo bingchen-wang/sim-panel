@@ -1,0 +1,13 @@
+output_dir: outputs/compare_amazon_cross_smoke
+outcome_field: rating
+
+conditions:
+  - label: amazon_self_selection
+    model: gemma3:12b
+    strategy: persona
+    run_dir: outputs/amazon_self_selection
+
+  - label: amazon_self_selection_cot
+    model: gemma3:12b
+    strategy: persona_cot
+    run_dir: outputs/amazon_self_selection_cot

@@ -17,8 +17,7 @@ from sim_panel.analysis.types import (
 )
 
 from sim_panel.config.yaml_loader import load_yaml
-from sim_panel.analysis.types import CompareConfig, ConditionSpec
-from sim_panel.analysis.tables import _build_flat_table, _build_pivot_table
+from sim_panel.analysis.compare.types import CompareConfig, ConditionSpec
 
 def build_analysis_config_from_yaml(path: str) -> AnalysisConfig:
     d = load_yaml(path)
@@ -303,12 +302,17 @@ def build_compare_config_from_dict(d: Mapping[str, Any]) -> CompareConfig:
                 f"conditions[{i}].events_filename must be a non-empty string"
             )
 
+        run_dir = c.get("run_dir")
+        if not isinstance(run_dir, str) or not run_dir:
+            raise ValueError(f"conditions[{i}].run_dir must be a non-empty string")
+
+
         conditions.append(
             ConditionSpec(
                 label=str(c.get("label", f"cond_{i}")),
                 model=str(c.get("model", "")),
                 strategy=str(c.get("strategy", "")),
-                run_dir=str(c["run_dir"]),
+                run_dir=run_dir,
                 condition_type=condition_type,
                 events_filename=events_filename,
             )
