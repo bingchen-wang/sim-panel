@@ -1,0 +1,10 @@
+{
+  "amazon_self_selection": {
+    "amazon_self_selection": 0.0,
+    "amazon_self_selection_cot": 0.011427152464588867
+  },
+  "amazon_self_selection_cot": {
+    "amazon_self_selection": 0.011427152464588867,
+    "amazon_self_selection_cot": 0.0
+  }
+}

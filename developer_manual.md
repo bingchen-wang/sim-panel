@@ -7,7 +7,6 @@
 This companion manual documents the architecture of `sim-panel` for developers. It explains the functions, interfaces, and design boundaries of each module, and shows how the main components fit together into the end-to-end generation pipeline.
 
 ## Table of Contents
-## Table of Contents
 - [Backends overview](#backends-overview)
   - [Core contract](#core-contract)
   - [Messages](#messages)
@@ -205,6 +204,42 @@ This companion manual documents the architecture of `sim-panel` for developers. 
   - [Current benchmark subset scope](#current-benchmark-subset-scope)
   - [Current benchmark outputs](#current-benchmark-outputs)
   - [Design notes and planned extensions](#design-notes-and-planned-extensions)
+
+- [Compare module overview](#compare-module-overview)
+  - [What it is](#what-it-is-3)
+  - [Main files](#main-files-3)
+  - [Core concepts](#core-concepts-1)
+    - [ConditionSpec](#conditionspec)
+    - [CompareConfig](#compareconfig)
+    - [CompareMode](#comparemode)
+    - [ConditionMetrics](#conditionmetrics)
+  - [Compare modes](#compare-modes)
+    - [Cross mode](#cross-mode)
+    - [Benchmark mode](#benchmark-mode)
+  - [Shared per-condition metrics](#shared-per-condition-metrics)
+    - [Rating summary](#rating-summary)
+    - [Distribution shape](#distribution-shape)
+    - [Persona differentiation](#persona-differentiation)
+    - [Product differentiation](#product-differentiation)
+  - [Cross-mode metrics](#cross-mode-metrics)
+    - [Intended interpretation](#intended-interpretation)
+  - [Benchmark-mode metrics](#benchmark-mode-metrics)
+    - [Product overlap](#product-overlap)
+    - [Review-distribution comparison on shared products](#review-distribution-comparison-on-shared-products)
+    - [Overall rating comparison on shared products](#overall-rating-comparison-on-shared-products)
+    - [Per-product rating comparison](#per-product-rating-comparison)
+    - [Product diagnostics top-K](#product-diagnostics-top-k)
+  - [Benchmark plots](#benchmark-plots)
+  - [YAML configuration](#yaml-configuration)
+    - [Cross compare YAML](#cross-compare-yaml)
+    - [Benchmark compare YAML](#benchmark-compare-yaml)
+    - [YAML notes](#yaml-notes)
+  - [CLI usage](#cli-usage)
+  - [Runtime flow](#runtime-flow)
+  - [Output artifacts](#output-artifacts-1)
+    - [Cross mode](#cross-mode-1)
+    - [Benchmark mode](#benchmark-mode-1)
+  - [Design invariants](#design-invariants-1)
 
 ## Backends overview
 `sim_panel/backends/` provides a single, provider-agnostic interface for anything that looks like “send messages → get text back”. Everything else in the repo (`panelists/products/generators`) should depend on this interface, not on vendor-specific SDKs.
@@ -2546,5 +2581,445 @@ A planned extension is to add more granular product-level benchmark summaries, f
 Those product-level summaries are deferred until they are directly needed by downstream comparison or reporting. For now, benchmark diagnostics remain deliberately lightweight so that the subset builder stays simple, reproducible, and fast on large imported artifacts.
 
 Implementation note:
-- `sim_panel/analysis/compare.py` remains the canonical comparison layer
+- `sim_panel/analysis/compare/` remains the canonical comparison layer
 - benchmark subsets created under `sim_panel/benchmarks/` are frozen reference inputs to that layer, not a separate analysis framework
+
+## Compare module overview
+
+### What it is
+
+`analysis/compare/` is the multi-run comparison subsystem for SIM-PANEL.
+
+It supports two comparison modes:
+
+- **cross mode**: compares multiple synthetic conditions against one another
+- **benchmark mode**: compares multiple synthetic conditions against a single real reference condition
+
+This module is intended for evaluation-stage analysis rather than single-run diagnostics. In particular, it is useful for:
+- comparing prompting strategies
+- benchmarking synthetic generations against imported real data
+- producing compact comparison tables and reports for downstream inspection
+
+### Main files
+
+- `analysis/compare/types.py`
+  - compare-specific dataclasses:
+    - `ConditionSpec`
+    - `CompareConfig`
+    - `ConditionMetrics`
+    - `CompareMode`
+- `analysis/compare/config.py`
+  - YAML parsing for compare jobs
+  - entry points:
+    - `build_compare_config_from_dict(...)`
+    - `build_compare_config_from_yaml(...)`
+- `analysis/compare/runner.py`
+  - orchestration entry point:
+    - `run_comparison(...)`
+- `analysis/compare/resolve.py`
+  - mode resolution:
+    - `resolve_compare_mode(...)`
+- `analysis/compare/metrics.py`
+  - shared per-condition metric computation
+- `analysis/compare/tables.py`
+  - tabular helpers:
+    - `build_flat_table(...)`
+    - `build_pivot_table(...)`
+- `analysis/compare/cross.py`
+  - synthetic-vs-synthetic comparison builders
+- `analysis/compare/benchmark.py`
+  - synthetic-vs-real benchmark builders
+- `analysis/compare/report.py`
+  - markdown report generation for both modes
+- `analysis/compare/plot.py`
+  - benchmark-specific figure generation
+  - currently includes overall rating bar charts
+
+### Core concepts
+
+#### ConditionSpec
+
+A `ConditionSpec` describes one run or artifact bundle to be compared.
+
+Fields:
+- `label: str`
+- `model: str`
+- `strategy: str`
+- `run_dir: str`
+- `condition_type: str = "synthetic"`
+- `events_filename: str = "events.jsonl"`
+
+Notes:
+- `condition_type` must currently be either `synthetic` or `real`
+- `is_real` is exposed as a property derived from `condition_type`
+- benchmark mode currently supports **at most one** real condition
+
+#### CompareConfig
+
+`CompareConfig` is the normalized compare-job config loaded from YAML.
+
+Fields:
+- `output_dir: str`
+- `outcome_field: str`
+- `conditions: list[ConditionSpec]`
+- `rating_scale: Optional[list[int]] = None`
+- `benchmark_top_k_products: int = 20`
+
+#### CompareMode
+
+`CompareMode` is the resolved mode for a compare job.
+
+Fields:
+- `kind: "cross" | "benchmark"`
+- `reference_label: Optional[str]`
+
+Resolution rules:
+- no real conditions -> `cross`
+- exactly one real condition -> `benchmark`
+- more than one real condition -> fail fast
+
+#### ConditionMetrics
+
+`ConditionMetrics` stores shared descriptive metrics for a single condition.
+
+Examples:
+- `n_evaluations`
+- `n_with_outcome`
+- `rating_mean`
+- `rating_std`
+- `rating_median`
+- `rating_entropy`
+- `rating_normalized_entropy`
+- `panelist_mean_variance`
+- `mean_pairwise_panelist_distance`
+- `product_mean_variance`
+- `rating_distribution`
+
+These are computed once and then reused by either comparison mode.
+
+---
+
+### Compare modes
+
+#### Cross mode
+
+Cross mode is for **synthetic-vs-synthetic** comparison.
+
+Use case:
+- compare prompting strategies or variants run on comparable product sets
+- inspect whether one strategy produces more diverse or more differentiated behavior than another
+
+Primary outputs:
+- per-condition metrics
+- model × strategy pivot tables
+- pairwise Jensen-Shannon divergence matrix over rating distributions
+- pairwise RMSE matrix over shared `(panelist_id, product_id)` pairs
+- markdown comparison report
+
+Current artifact keys:
+- `mode`
+- `condition_metrics`
+- `pivot_tables`
+- `js_divergence_matrix`
+- `pairwise_rmse_matrix`
+
+#### Benchmark mode
+
+Benchmark mode is for **synthetic-vs-real** comparison.
+
+Use case:
+- benchmark synthetic generations against imported human data
+- compare prompt strategies on their distributional match to a real reference
+
+Current benchmark workflow:
+1. identify overlap in `product_id`s between a synthetic condition and the reference
+2. restrict benchmark calculations to shared products
+3. compare:
+   - review-count distributions over shared products
+   - overall rating distributions over shared products
+   - per-product rating distributions over shared products
+4. aggregate per-product distances using two schemes:
+   - egalitarian
+   - utilitarian (reference-review-weighted)
+
+Primary outputs:
+- per-condition metrics
+- benchmark summary table
+- top-K product diagnostics (best/worst by EMD)
+- benchmark rating bar chart figure
+- markdown benchmark report
+
+Current artifact keys:
+- `mode`
+- `reference_label`
+- `condition_metrics`
+- `benchmark_summary`
+- `benchmark_product_diagnostics_topk`
+- `pivot_tables`
+- `benchmark_rating_bar_chart_path`
+
+---
+
+### Shared per-condition metrics
+
+`metrics.py` computes condition-level descriptive metrics shared by both modes.
+
+#### Rating summary
+- mean
+- standard deviation
+- median
+
+#### Distribution shape
+- raw rating count distribution
+- entropy
+- normalized entropy
+
+#### Persona differentiation
+- variance of panelist-level mean outcomes
+- mean pairwise panelist distance over overlapping products
+
+#### Product differentiation
+- variance of product-level mean outcomes
+
+These metrics are descriptive rather than benchmark-specific. They are included in reports for quick sanity checks and context.
+
+---
+
+### Cross-mode metrics
+
+`cross.py` currently provides:
+
+- pairwise Jensen-Shannon divergence between overall rating distributions
+- pairwise RMSE between conditions over shared `(panelist_id, product_id)` pairs
+
+#### Intended interpretation
+
+- **JSD**: how different the overall rating distributions are
+- **pairwise RMSE**: how different aligned panelist-product evaluations are, when overlap exists
+
+Cross mode assumes conditions are comparable enough that product overlap is common and panelist overlap may also exist.
+
+---
+
+### Benchmark-mode metrics
+
+`benchmark.py` currently produces a `benchmark_summary` row for each synthetic condition against the real reference.
+
+#### Product overlap
+- `n_reference_products`
+- `n_condition_products`
+- `n_shared_products`
+- `product_overlap_rate_vs_reference`
+- `product_jaccard_overlap`
+
+#### Review-distribution comparison on shared products
+- `n_reference_reviews_on_shared_products`
+- `n_condition_reviews_on_shared_products`
+- `shared_product_review_js_divergence`
+- `shared_product_review_l1_distance`
+
+These metrics capture whether the synthetic condition allocates review mass across shared products similarly to the reference.
+
+#### Overall rating comparison on shared products
+- `overall_rating_js_divergence`
+- `overall_rating_emd`
+
+These are computed after restricting both conditions to shared products only.
+
+#### Per-product rating comparison
+For each shared product, the module computes:
+- per-product JSD
+- per-product EMD
+- reference mean rating
+- synthetic mean rating
+
+These per-product distances are then aggregated into:
+- `rating_jsd_egalitarian`
+- `rating_jsd_utilitarian`
+- `rating_emd_egalitarian`
+- `rating_emd_utilitarian`
+
+Interpretation:
+- **egalitarian**: all shared products weighted equally
+- **utilitarian**: products weighted by their review frequency in the reference data
+
+#### Product diagnostics top-K
+
+The benchmark module does **not** export the full per-product table by default.
+
+Instead, it exports only:
+- best K products by EMD
+- worst K products by EMD
+
+This keeps artifacts readable when the shared product set is large.
+
+Current diagnostic columns include:
+- `reference_label`
+- `label`
+- `model`
+- `strategy`
+- `product_id`
+- `n_reference_reviews`
+- `n_condition_reviews`
+- `product_js_divergence`
+- `product_emd`
+- `reference_mean_rating`
+- `condition_mean_rating`
+- `diagnostic_bucket`
+
+`diagnostic_bucket` is one of:
+- `best_by_emd`
+- `worst_by_emd`
+
+---
+
+### Benchmark plots
+
+`plot.py` currently provides:
+
+- `save_benchmark_rating_bar_charts(...)`
+
+This writes a single-row panel of overall rating bar charts, ordered as:
+- all synthetic conditions first, preserving config order
+- real reference on the far right
+
+Each panel displays the normalized overall rating distribution for one condition.
+
+The chart is saved into the compare output directory and embedded inline in the benchmark markdown report.
+
+---
+
+### YAML configuration
+
+#### Cross compare YAML
+
+Minimal example:
+
+```yaml
+output_dir: outputs/compare_amazon_cross_smoke
+outcome_field: rating
+
+conditions:
+  - label: amazon_self_selection
+    model: gemma3:12b
+    strategy: persona
+    run_dir: outputs/amazon_self_selection
+
+  - label: amazon_self_selection_cot
+    model: gemma3:12b
+    strategy: persona_cot
+    run_dir: outputs/amazon_self_selection_cot
+```
+
+#### Benchmark compare YAML
+
+Minimal example:
+
+```yaml
+output_dir: outputs/compare_amazon_benchmark_smoke
+outcome_field: rating
+benchmark_top_k_products: 20
+
+conditions:
+  - label: amazon_grocery_real
+    model: real
+    strategy: reference
+    run_dir: outputs/benchmarks/amazon_grocery_ratings_tiny
+    condition_type: real
+    events_filename: events.jsonl
+
+  - label: amazon_self_selection
+    model: gemma3:12b
+    strategy: persona
+    run_dir: outputs/amazon_self_selection
+    condition_type: synthetic
+    events_filename: events.jsonl
+
+  - label: amazon_self_selection_cot
+    model: gemma3:12b
+    strategy: persona_cot
+    run_dir: outputs/amazon_self_selection_cot
+    condition_type: synthetic
+    events_filename: events.jsonl
+```
+
+#### YAML notes
+
+- `output_dir` is required
+- `conditions` must be a non-empty list
+- `run_dir` must be a non-empty string for every condition
+- `condition_type` defaults to `synthetic`
+- benchmark mode is triggered by the presence of exactly one `real` condition
+- `events_filename` defaults to `events.jsonl`
+- `benchmark_top_k_products` controls the number of best and worst products exported per condition in benchmark mode
+
+---
+
+### CLI usage
+
+The compare pipeline is exposed through:
+
+```bash
+sim-panel compare --config path/to/compare.yaml
+```
+
+The CLI loads:
+- `build_compare_config_from_yaml(...)`
+- `run_comparison(...)`
+
+and writes artifacts to the configured `output_dir`.
+
+---
+
+### Runtime flow
+
+At a high level, `run_comparison(...)` does:
+
+1. resolve compare mode from `conditions`
+2. load event rows from each condition directory
+3. restrict rows to `event_type == "evaluation"`
+4. compute shared per-condition metrics
+5. dispatch to:
+   - `build_cross_comparison_artifacts(...)`, or
+   - `build_benchmark_comparison_artifacts(...)`
+6. in benchmark mode, save rating bar chart figure
+7. build the corresponding markdown report
+8. write artifacts to disk
+
+---
+
+### Output artifacts
+
+#### Cross mode
+Typical outputs:
+- `condition_metrics.json`
+- `condition_metrics.csv`
+- `pivot_tables.json`
+- `js_divergence_matrix.json`
+- `pairwise_rmse_matrix.json`
+- `comparison_report.md`
+
+#### Benchmark mode
+Typical outputs:
+- `condition_metrics.json`
+- `condition_metrics.csv`
+- `benchmark_summary.json`
+- `benchmark_summary.csv`
+- `benchmark_product_diagnostics_topk.json`
+- `benchmark_product_diagnostics_topk.csv`
+- `pivot_tables.json`
+- `benchmark_rating_bar_charts.png`
+- `comparison_report.md`
+
+The markdown benchmark report embeds the bar chart inline using a relative image path.
+
+---
+
+### Design invariants
+
+- compare mode resolution is explicit and fail-fast
+- benchmark mode currently supports exactly one real reference condition
+- benchmark calculations are restricted to shared products when comparing real vs synthetic
+- per-condition descriptive metrics are computed once and reused
+- the compare subsystem is structurally separate from single-run `analysis/metrics/` and `analysis/regression/`
+- compare-specific dataclasses and config parsing live under `analysis/compare/`

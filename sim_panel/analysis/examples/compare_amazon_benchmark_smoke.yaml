@@ -1,0 +1,25 @@
+output_dir: outputs/compare_amazon_benchmark_smoke
+outcome_field: rating
+benchmark_top_k_products: 20
+
+conditions:
+  - label: amazon_grocery_real
+    model: real
+    strategy: reference
+    run_dir: outputs/benchmarks/amazon_grocery_ratings_tiny
+    condition_type: real
+    events_filename: events.jsonl
+
+  - label: amazon_self_selection
+    model: gemma3:12b
+    strategy: persona
+    run_dir: outputs/amazon_self_selection
+    condition_type: synthetic
+    events_filename: events.jsonl
+
+  - label: amazon_self_selection_cot
+    model: gemma3:12b
+    strategy: persona_cot
+    run_dir: outputs/amazon_self_selection_cot
+    condition_type: synthetic
+    events_filename: events.jsonl

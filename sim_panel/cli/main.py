@@ -38,6 +38,9 @@ from sim_panel.data_gen.run import run_datagen_from_yaml
 from sim_panel.analysis import (
     build_analysis_config_from_yaml,
     run_analysis,
+)
+
+from sim_panel.analysis.compare import (
     build_compare_config_from_yaml,
     run_comparison,
 )
