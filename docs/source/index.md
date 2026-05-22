@@ -3,6 +3,12 @@
 <img src="_static/main-logo-light.svg" alt="SIM-PANEL logo" class="main-logo main-logo-light" />
 <img src="_static/main-logo-dark.svg" alt="SIM-PANEL logo" class="main-logo main-logo-dark" />
 
+<div class="repo-link-card">
+  <a href="https://github.com/bingchen-wang/sim-panel" target="_blank" rel="noopener">
+    <strong>GitHub repository</strong>
+  </a>
+</div>
+
 **SIM-PANEL** is a reproducible simulation and benchmarking toolkit for generating
 synthetic panel-style datasets in which agents evaluate products, interventions,
 or other candidate items under controlled experimental designs.
@@ -145,9 +151,6 @@ For reproducible bugs, feature requests, or documentation issues, please use the
 
 For research-related inquiries, contact **Bingchen Wang** at
 `bw2506 [at] columbia [dot] edu`.
-
-Project links: [website](https://bingchen-wang.github.io/sim-panel) ·
-[GitHub repository](https://github.com/bingchen-wang/sim-panel)
 
 ## Acknowledgements
 
