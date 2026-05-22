@@ -210,9 +210,12 @@ __marimo__/
 .DS_Store
 
 # Raw external source data
-data/raw/
+data/
 
 # Outputs
-outputs/import_amazon_grocery_full/
-outputs/import_amazon_grocery_full/**
-# outputs/   # can do this later if needed
+outputs/
+
+# Features under development
+preview_lab_manual.md
+sim_panel/analysis/examples/analysis_preview.yaml
+scripts/
