@@ -9,6 +9,7 @@
 </p>
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 
 > Current version: v0.1.0-public — research prototype release, May 2026
 
