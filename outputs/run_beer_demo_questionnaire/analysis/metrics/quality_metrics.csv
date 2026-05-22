@@ -1,2 +1,0 @@
-n_events,n_selection_rows,n_evaluation_rows,rows_with_any_outcome_rate,rows_with_any_trace_rate,panelist_feature_coverage_rate,product_feature_coverage_rate,selection_link_rate,outcome_missing_rate__bitterness,outcome_missing_rate__drinking_habit,outcome_missing_rate__purchase_intent,outcome_missing_rate__rating,outcome_missing_rate__usefulness,trace_missing_rate__rationale
-80,20,60,1.0,1.0,1.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,0.25

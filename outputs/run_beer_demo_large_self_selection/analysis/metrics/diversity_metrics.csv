@@ -1,4 +1,0 @@
-field_name,n_evaluation_rows,type,n_observed,support_size_observed,support_size_allowed,entropy,normalized_entropy_full_support,normalized_entropy_observed_support,value_counts,mean,variance
-bitterness,60,int,60,4,5,1.4663851976029472,0.6315377297134097,0.7331925988014736,"{""1"": 1, ""2"": 29, ""3"": 24, ""4"": 6}",2.5833333333333335,0.4763888888888889
-purchase_intent,60,categorical,60,3,3,1.3248560371987566,0.835891093067469,0.835891093067469,"{""maybe"": 34, ""no"": 6, ""yes"": 20}",,
-rating,60,int,60,4,5,1.7149245934610593,0.7385778212672219,0.8574622967305296,"{""1"": 2, ""2"": 22, ""3"": 14, ""4"": 22}",2.933333333333333,0.8622222222222222

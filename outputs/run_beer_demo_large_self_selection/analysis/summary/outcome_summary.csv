@@ -1,4 +1,0 @@
-field_name,n_evaluation_rows,type,n_observed,n_missing,summary__n,summary__mean,summary__min,summary__max,summary__value_counts,summary__n_unique,summary__top_values
-bitterness,60,int,60,0,60,2.5833333333333335,1,4,"{""1"": 1, ""2"": 29, ""3"": 24, ""4"": 6}",,
-purchase_intent,60,categorical,60,0,60,,,,"{""maybe"": 34, ""no"": 6, ""yes"": 20}",3,"[[""maybe"", 34], [""yes"", 20], [""no"", 6]]"
-rating,60,int,60,0,60,2.933333333333333,1,4,"{""1"": 2, ""2"": 22, ""3"": 14, ""4"": 22}",,

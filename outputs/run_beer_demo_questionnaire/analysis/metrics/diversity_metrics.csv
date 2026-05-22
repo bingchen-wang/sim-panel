@@ -1,6 +1,0 @@
-field_name,n_evaluation_rows,type,n_observed,support_size_observed,support_size_allowed,entropy,normalized_entropy_full_support,normalized_entropy_observed_support,value_counts,mean,variance
-bitterness,60,int,60,3,5,1.424834364808337,0.6136427600603439,0.8989703946686681,"{""2"": 29, ""3"": 23, ""4"": 8}",2.65,0.49416666666666664
-drinking_habit,60,categorical,60,2,2,0.41381685030363374,0.41381685030363374,0.41381685030363374,"{""no"": 5, ""yes"": 55}",,
-purchase_intent,60,categorical,60,3,3,1.3176717045685364,0.8313582838515089,0.8313582838515089,"{""maybe"": 37, ""no"": 8, ""yes"": 15}",,
-rating,60,int,60,4,5,1.7759662203179123,0.7648670190211317,0.8879831101589561,"{""1"": 3, ""2"": 23, ""3"": 18, ""4"": 16}",2.783333333333333,0.8030555555555555
-usefulness,60,categorical,60,1,2,0.0,0.0,,"{""yes"": 60}",,

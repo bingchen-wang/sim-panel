@@ -1,6 +1,0 @@
-column,reason
-panelist.income_bracket_30-60k,duplicate
-panelist.income_bracket_60-100k,rank_deficient
-panelist.income_bracket_<30k,rank_deficient
-panelist.region_South,rank_deficient
-panelist.region_West,rank_deficient
