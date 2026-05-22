@@ -1,4 +1,3 @@
-# sim_panel/config/examples/minimal.yaml
 # Minimal config for CI / quick local smoke tests.
 # - No backend required (deterministic outcomes)
 # - No enrichment

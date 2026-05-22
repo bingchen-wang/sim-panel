@@ -1,4 +1,3 @@
-# sim_panel/data_gen/examples/beer_demo.yaml
 
 backend:
   name: ollama

@@ -29,8 +29,8 @@ def build_analysis_config_from_dict(d: Mapping[str, Any]) -> AnalysisConfig:
     Build an AnalysisConfig from a YAML-parsed dict.
 
     Minimal YAML:
-        run_dir: outputs/run_beer_demo_large_self_selection
-        output_dir: outputs/run_beer_demo_large_self_selection/analysis
+        run_dir: outputs/run_001
+        output_dir: outputs/run_001/analysis
 
     Optional sections:
         load:
