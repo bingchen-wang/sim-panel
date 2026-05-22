@@ -1,340 +1,321 @@
-# SIM-PANEL — Synthetic Panelists for Product Reviews
+# SIM-PANEL — Synthetic Panel Datasets for Agent Evaluation
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.svg">
-    <img src="assets/logo-light.svg" alt="sim-panel logo" width="500">
+    <img src="assets/logo-light.svg" alt="SIM-PANEL logo" width="500">
   </picture>
 </p>
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-> Current version: IRP-v0 (Internal research prototype, 7 March, 2026)
+> Current version: v0.1.0-public — research prototype release, May 2026
 
-**SIM-PANEL** generates **schema-validated** synthetic panelist–product interaction datasets for LLM agent-based simulation projects.
+**Documentation / project site:** https://bingchen-wang.github.io/sim-panel/
 
+**SIM-PANEL** is a reproducible research-engineering toolkit for generating,
+validating, analyzing, and comparing panel-style event datasets.
 
-## Concepts
-The simulation system is organized using the following concepts:
-- **Panelist**: a simulated customer. At runtime, a panelist is driven by `persona_text` (system prompt) and can optionally carry structured `attributes` (emitted as `panelist_features` in events).
-- **Product**: an item/intervention being evaluated. Products separate internal identifiers (`product_id`) from panelist-facing exposure (`display_name`, optional `display_text`) and structured `attributes` (emitted as `product_features`).
-- **Event**: an interaction event, describing which panelist gets which product at what time and the outcome of the exposure. Under `self_selection` policy, it also includes an initial selection/offer stage.
-- **Policy**: how exposures are generated.
-  - `random`: assigns product(s) to each panelist-period (RCT-style supported; default `balanced_quota`).
-  - `manual`: assigns based on a user-provided mapping loaded from file and injected as a function.
-  - `self_selection`: shows a choice set and lets the panelist choose which items to evaluate; generator applies operational execution rules (e.g., caps).
+It is designed as an engineering scaffold for LLM-based agent simulation,
+preference reconstruction, and verifiable behavioral evaluation. The package
+focuses on transparent data generation, schema validation, YAML-configured
+experiments, and distributional diagnostics rather than large-scale black-box
+simulation.
 
----
+## What SIM-PANEL does
+
+SIM-PANEL supports workflows where simulated panelists evaluate products,
+interventions, or other candidate items over time.
+
+Core capabilities include:
+
+- versioned event-level schemas;
+- YAML-configured generation runs;
+- randomized, manual, and self-selection exposure policies;
+- deterministic seeding for non-LLM components;
+- JSONL-first outputs with metadata and data dictionaries;
+- optional CSV export;
+- source adapters for importing real review-style data;
+- benchmark subset construction from imported real data;
+- single-run analysis, optional regression diagnostics, and multi-condition comparison;
+- optional LLM-backed enrichment, selection, and outcome generation.
+
+Synthetic data in SIM-PANEL is intended for **schema debugging, pipeline testing,
+ablation scaffolding, and simulation-design prototyping**. It should not be
+interpreted as a substitute for primary empirical validation.
+
+## Core concepts
+
+| Concept | Meaning |
+| --- | --- |
+| Panelist | A simulated respondent, user, customer, or agent. |
+| Product | An item, intervention, treatment, or candidate object being evaluated. |
+| Event | One schema-valid row in `events.jsonl`. |
+| Policy | Exposure logic determining how panelists encounter products. |
+| Outcome | Structured evaluation result, such as rating or purchase intent. |
+| Trace | Optional auxiliary text, rationale, source provenance, or debug payload. |
+
+SIM-PANEL currently supports three exposure policies:
+
+| Policy | Description |
+| --- | --- |
+| `random` | Products are assigned to panelists exogenously. |
+| `manual` | Product-panelist assignments are loaded from a schedule or mapping. |
+| `self_selection` | Panelists choose products from a shown choice set. |
+
+## Module structure
+
+SIM-PANEL keeps ingestion, generation, analysis, and comparison separate:
+
+```text
+sources/
+  raw external data -> imported canonical artifacts
+
+benchmarks/
+  imported artifacts -> frozen real-data subsets
+
+generators/
+  panelists + products + policies + outcomes -> synthetic events
+
+analysis/
+  one run -> summaries, metrics, plots, reports, optional regression
+
+analysis/compare/
+  multiple conditions or reference subsets -> comparison metrics and reports
+```
+
+The shorthand is:
+
+> Sources ingest. Benchmarks freeze. Generation simulates. Analysis inspects.
+> Comparison evaluates.
+
 ## Outputs
 
-A generation run writes an output directory containing:
+A standard generation run writes:
 
-- `events.jsonl` (default) and optionally `events.csv`
-- `metadata.json` (schema version, seed, counts, config snapshot/hash, input paths/variants)
-- `data_dictionary.json` (configs/spec snapshots, including questionnaire spec and execution rules)
+```text
+outputs/run_001/
+  events.jsonl
+  metadata.json
+  data_dictionary.json
+```
 
-### Structure of an `Event` (v0.1.0)
+Optional CSV export writes:
 
-Typical columns include:
+```text
+outputs/run_001/
+  events.csv
+```
+
+`events.jsonl` is the canonical dataset artifact. Each row is a schema-valid
+event with fields such as:
 
 - `schema_version`
 - `event_id`
-- `event_type`: `selection` or `evaluation`
+- `event_type`
+- `policy`
 - `panelist_id`
-- `t` (period index)
-- `policy` (e.g., `random`, `manual`, `self_selection`)
-
-Selection-only fields (`event_type == "selection"`):
-- `choice_set`: list of product_ids shown
-- `selected_product_ids`: list chosen/requested by the panelist (may be empty)
-
-Evaluation-only fields (`event_type == "evaluation"`):
 - `product_id`
-- `product_display` (panelist-facing text rendered from product record)
-- `panelist_features` (JSON; may be `{}`)
-- `product_features` (JSON; may be `{}`)
-- `outcomes` (JSON payload governed by YAML questionnaire; may be `null`)
-- `traces` (optional JSON payload; may be `null`)
-- `selection_id` (`null` unless `policy == "self_selection"`; links back to the corresponding selection event)
+- `t`
+- `outcomes`
+- `traces`
+- `panelist_features`
+- `product_features`
+
+Self-selection runs may also include `selection` events and linked `evaluation`
+events via `selection_id`.
 
 ## Installation
-From the repo root:
+
+Clone the repository:
+
+```bash
+git clone https://github.com/bingchen-wang/sim-panel.git
+cd sim-panel
+```
+
+Create and activate a virtual environment:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+```
+
+Install SIM-PANEL:
 
 ```bash
 pip install -e .
 ```
 
-A `sim-panel` console command is provided via `pyproject.toml` after installation. If you prefer, you can also invoke the CLI as
+For development and documentation work:
 
 ```bash
-python -m sim_panel.cli.main <command> ...
+pip install -e ".[dev,docs]"
+```
+
+Verify the CLI:
+
+```bash
+sim-panel --help
 ```
 
 ## Quickstart
 
-### 0) Repo layout
-
-Keep generated datasets and outputs at the repo root:
-
-```
-sim-panel/
-  sim_panel/
-  data/
-  outputs/
-  README.md
-  developer_manual.md
-```
-
-### 1) Create demo data (LLM spec generation)
-Generate spec-only personas/products using a **data-gen YAML**:
+Generate a small dataset from a YAML config:
 
 ```bash
-sim-panel make-data --config sim_panel/data_gen/examples/beer_demo.yaml
+sim-panel generate \
+  --config examples/configs/minimal.yaml \
+  --output-dir outputs/run_001
 ```
 
-This writes (as configured in the YAML):
-- `data/personas_beer_demo.jsonl`
-- `data/products_beer_demo.jsonl`
-
-Notes:
-- This generates **attributes/specs** (no persona/product text by default).
-- Text can be generated later via persisted enrichment (`panelists.enrich` / `products.enrich`) in the run config, or via `enrich_after` in the data-gen YAML.
-
-### 2) Generate a small dataset from an example run config
-
-```bash
-sim-panel generate --config sim_panel/config/examples/self_selection.yaml --output-dir outputs/run_001
-```
-
-Optional CSV:
-
-```bash
-sim-panel generate --config sim_panel/config/examples/manual.yaml --output-dir outputs/run_002 --csv
-```
-
-### 3) Validate output
+Validate the generated events:
 
 ```bash
 sim-panel validate --input outputs/run_001/events.jsonl
 ```
 
-Validation includes:
-- per-row schema validation (Pydantic)
-- global `event_id` uniqueness
-- self-selection linkage checks (selection_id must reference a valid selection event at the same `(panelist_id, t)`)
-
-### 4) Sample a few rows
+Sample a few rows:
 
 ```bash
-sim-panel sample --input outputs/run_001/events.jsonl --n 5 --seed 0
+sim-panel sample \
+  --input outputs/run_001/events.jsonl \
+  --n 5 \
+  --seed 0
 ```
 
----
-
-## Configuration overview (high level)
-
-There are two YAMLs you will commonly use:
-
-1) **Data generation YAML** (for producing `data/*.jsonl` specs):
-- `sim_panel/data_gen/examples/beer_demo.yaml`
-
-2) **Run configuration YAML** (for producing `outputs/*/events.jsonl`):
-- `sim_panel/config/examples/minimal.yaml`
-- `sim_panel/config/examples/self_selection.yaml`
-- `sim_panel/config/examples/manual.yaml`
-
-Key run-config capabilities:
-- **Persisted enrichment** (generate `persona_text` / `display_text` once and save in place or to a new file).
-- **Manual schedule loader** (load CSV/JSON mapping and inject `manual_assignment_fn` into `PolicyConfig`).
-- **Outcomes questionnaire** governed by YAML (fields + choices + instructions), emitted as `outcomes` and optional `traces`.
-
-### Example of a run config (LLM run with Ollama)
-
-```yaml
-# Minimal run config (LLM-based evaluation; Ollama backend required)
-output_dir: outputs/run_llm_minimal
-
-backend:
-  name: ollama
-  model: gemma3:12b
-  return_usage: true
-  params:
-    base_url: "http://localhost:11434"
-    timeout_s: 60
-
-generator:
-  schema_version: "0.1.0"
-  seed: 0
-  n_periods: 1
-  validate_on_finish: true
-  max_errors: 50
-  event_namespace: "sim_panel.v0"
-
-panelists:
-  source: data/personas_beer_demo.jsonl
-  variant: default
-  # Assumes persona_text already exists. If not, enable persisted enrichment:
-  # enrich:
-  #   enabled: true
-  #   overwrite: false
-  #   save: in_place
-  #   settings:
-  #     prompt_version: v1
-  #     temperature: 0.2
-  #     max_tokens: 600
-  #     metadata: {module: panelists.enrich}
-
-  eval_settings:
-    temperature: 0.2
-    max_tokens: 900
-    metadata: {module: panelists.evaluate}
-
-products:
-  source: data/products_beer_demo.jsonl
-  variant: default
-  # Assumes display_text exists (optional). If missing, enable persisted enrichment:
-  # enrich:
-  #   enabled: true
-  #   overwrite: false
-  #   save: in_place
-  #   settings:
-  #     prompt_version: v1
-  #     campaign: "beer-demo"
-  #     tone: neutral
-  #     length: short
-  #     temperature: 0.2
-  #     max_tokens: 320
-  #     metadata: {module: products.enrich}
-
-policy:
-  name: random
-  evals_per_period: 1
-  random_mode: balanced_quota
-
-selection:
-  allow_empty: true
-  include_product_features: true
-  require_json_only: true
-  max_selected_soft: null
-  include_raw_text: true
-
-execution:
-  enforce_subset_of_choice_set: true
-  max_evals_per_panelist_per_t: null
-  allow_empty: true
-  keep_strategy: keep_first
-
-outcomes_model:
-  name: llm
-  temperature: 0.2
-  max_tokens: 900
-  include_raw_text: true
-
-questionnaire:
-  outcomes:
-    fields:
-      rating:
-        type: int
-        choices: [1, 2, 3, 4, 5]
-        question: "Overall, how much do you like this beer?"
-        instruction: "Pick one integer."
-        required: true
-
-      purchase_intent:
-        type: categorical
-        choices: ["no", "maybe", "yes"]
-        question: "How likely are you to purchase this beer in the next 30 days?"
-        instruction: "Choose one option."
-        required: true
-
-  traces:
-    fields:
-      rationale:
-        type: text
-        question: "Briefly explain your ratings."
-        required: false
-```
-
-Suggested command:
+Run single-run analysis:
 
 ```bash
-sim-panel generate --config sim_panel/config/examples/llm_minimal.yaml --output-dir outputs/run_llm_minimal
-```
-### Example of a data-gen config (LLM spec generation with Ollama)
-
-```yaml
-# Minimal data-gen config (LLM-based spec generation; Ollama backend required)
-backend:
-  name: ollama
-  model: gemma3:12b
-  return_usage: true
-  params:
-    base_url: "http://localhost:11434"
-    timeout_s: 60
-
-output:
-  personas_path: data/personas_beer_demo.jsonl
-  products_path: data/products_beer_demo.jsonl
-
-personas:
-  n: 20
-  seed: 101
-  persona_text_variant: default
-  persona_id_prefix: p
-  llm:
-    prompt_version: v1
-    temperature: 0.2
-    max_tokens: 1600
-    batch_size: 10
-    max_retries: 2
-    require_json_only: true
-
-products:
-  kind: beer
-  n: 5
-  seed: 101
-  display_variant: default
-  product_id_prefix: prod
-  llm:
-    prompt_version: v1
-    temperature: 0.2
-    max_tokens: 1800
-    batch_size: 10
-    max_retries: 2
-    require_json_only: true
-
-# Optional: run text enrichment immediately after spec generation (persisted).
-enrich_after:
-  enabled: false
-  panelists:
-    overwrite: false
-    save: in_place
-    settings:
-      prompt_version: v1
-      temperature: 0.2
-      max_tokens: 600
-      metadata: {module: panelists.enrich}
-  products:
-    overwrite: false
-    save: in_place
-    settings:
-      prompt_version: v1
-      campaign: "beer-demo"
-      tone: neutral
-      length: short
-      temperature: 0.2
-      max_tokens: 320
-      metadata: {module: products.enrich}
+sim-panel analyze --config examples/configs/analysis.yaml
 ```
 
-Suggested command:
+Compare multiple conditions or compare synthetic outputs against a reference:
 
 ```bash
-sim-panel make-data --config sim_panel/data_gen/examples/beer_demo.yaml
+sim-panel compare --config examples/configs/compare.yaml
 ```
 
-For module-level details and invariants, see the [Developer Manual](developer_manual.md).
+## Source import and benchmark subsets
+
+SIM-PANEL can import external review-style datasets into canonical artifacts.
+The current source layer includes an Amazon Reviews'23 adapter.
+
+A typical real-data workflow is:
+
+```bash
+sim-panel import --config examples/configs/import_amazon.yaml
+
+sim-panel benchmark-subset --config examples/configs/benchmark_subset.yaml
+```
+
+This produces a frozen real-data subset that can be used by the comparison layer.
+
+## CLI commands
+
+| Command | Purpose |
+| --- | --- |
+| `make-data` | Generate demo persona/product datasets. |
+| `generate` | Generate synthetic event rows from a run config. |
+| `validate` | Validate an events JSONL file. |
+| `sample` | Print sampled rows from an events JSONL file. |
+| `import` | Import an external source dataset. |
+| `benchmark-subset` | Freeze a benchmark-ready real-data subset. |
+| `analyze` | Run single-run analysis. |
+| `compare` | Compare multiple conditions or synthetic outputs against a reference. |
+
+## Documentation
+
+The Sphinx documentation lives under:
+
+```text
+docs/source/
+```
+
+Build locally with:
+
+```bash
+sphinx-build -b html docs/source docs/build/html
+```
+
+After the repository is public and GitHub Pages is enabled, the documentation
+site will be available at:
+
+```text
+https://bingchen-wang.github.io/sim-panel/
+```
+
+## Development
+
+Run tests:
+
+```bash
+python -m pytest
+```
+
+Build docs with warnings treated as errors:
+
+```bash
+sphinx-build -b html docs/source docs/build/html -W
+```
+
+Check the CLI:
+
+```bash
+sim-panel --help
+sim-panel generate --help
+sim-panel validate --help
+sim-panel analyze --help
+sim-panel compare --help
+```
+
+Do not commit raw external data, generated outputs, local benchmark runs, or built
+documentation artifacts.
+
+## Project status and scope
+
+SIM-PANEL is an ongoing research-engineering project. The public API and schema
+may evolve.
+
+The current emphasis is on:
+
+- clean event schemas;
+- deterministic local generation;
+- modular policies and outcome models;
+- real-data ingestion scaffolds;
+- frozen reference subsets;
+- transparent diagnostics and comparison reports.
+
+SIM-PANEL is not intended to claim that synthetic panelists are substitutes for
+human subjects or primary empirical validation.
+
+
+## Contact
+
+For reproducible bugs, feature requests, or documentation issues, please use the
+[GitHub issue tracker](https://github.com/bingchen-wang/sim-panel/issues).
+
+For research-related inquiries, contact **Bingchen Wang** at
+`bw2506 [at] columbia [dot] edu`.
+
+
+## Acknowledgements
+
+SIM-PANEL is developed and maintained by **Bingchen Wang** as an independent
+research-engineering project.
+
+The project benefited from early discussions with **Bruno Abrahao** and
+**Teutly Correia** on agent-based product evaluation workflows. These discussions
+helped motivate the beer-demo example and informed the Amazon Reviews'23
+ingestion and benchmarking direction. Bruno Abrahao also contributed initial
+commits to an early prototype.
+
+Any errors, design choices, or limitations remain the responsibility of the
+maintainer.
+
 
 ## License
-Apache-2.0. See `LICENSE` (and `NOTICE`).
+
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

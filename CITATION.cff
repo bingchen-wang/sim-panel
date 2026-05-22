@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+title: "sim-panel"
+message: "If you use this software, please cite it using the metadata from this file."
+type: software
+authors:
+  - family-names: Wang
+    given-names: Bingchen
+repository-code: "https://github.com/bingchen-wang/sim-panel"
+version: "0.1.0"
+date-released: "2026-05-22"
