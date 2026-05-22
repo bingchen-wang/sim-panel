@@ -24,12 +24,12 @@ class SelectionSpec:
 @dataclass(frozen=True)
 class ExposureDecision:
     """
-    Policy decision for one (panelist_id, t).
+    Policy decision for one ``(panelist_id, t)``.
 
-    Exactly one of:
-      - evaluate_product_ids (random/manual)
-      - selection (self_selection)
-    should be populated.
+    Exactly one of the following fields should be populated:
+
+    - ``evaluate_product_ids`` for random/manual exposure.
+    - ``selection`` for self-selection exposure.
     """
     panelist_id: str
     t: int

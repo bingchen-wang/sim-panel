@@ -2550,7 +2550,7 @@ That extension would allow finer benchmark carving within a previously imported 
 
 The benchmark subset directory contract is currently:
 
-- `events_real.jsonl`
+- `events.jsonl`
 - `products.jsonl`
 - `metadata.json`
 - `stats.json`
