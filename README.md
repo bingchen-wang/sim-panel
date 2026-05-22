@@ -9,7 +9,7 @@
 </p>
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/bingchen-wang/sim-panel?label=release)](https://github.com/bingchen-wang/sim-panel/releases)
+[![Release](https://img.shields.io/github/v/release/bingchen-wang/sim-panel?include_prereleases&label=release)](https://github.com/bingchen-wang/sim-panel/releases)
 [![Docs](https://img.shields.io/github/actions/workflow/status/bingchen-wang/sim-panel/docs.yml?branch=main&label=docs)](https://github.com/bingchen-wang/sim-panel/actions/workflows/docs.yml)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 
